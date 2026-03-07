@@ -22,9 +22,15 @@ pub fn formatter_options_from_lsp(lsp: &FormattingOptions) -> FormatterOptions {
 
 pub use leekscript_rs::{line_col_utf16_to_byte, line_prefix_utf16};
 
+/// Parse a string as an LSP URL. Returns None if the string is not a valid URI.
+#[must_use]
+pub fn parse_uri(uri: &str) -> Option<Url> {
+    Url::parse(uri).ok()
+}
+
 /// If the URI is a file URI, return its path; otherwise None.
 pub fn uri_to_path(uri: &str) -> Option<PathBuf> {
-    let url = Url::parse(uri).ok()?;
+    let url = parse_uri(uri)?;
     if url.scheme() != "file" {
         return None;
     }

@@ -5,6 +5,16 @@
 
 mod backend;
 mod config;
+mod hover;
+mod navigation;
+mod symbols;
+mod completion;
+mod signature_help_handler;
+mod inlay_hints;
+mod folding;
+mod links;
+mod formatting;
+mod hierarchy;
 mod diagnostics;
 mod document;
 mod doc_comment;
