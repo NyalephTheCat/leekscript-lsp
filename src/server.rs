@@ -44,6 +44,7 @@ impl LanguageServer for Backend {
                 let config_obj = opts.get("leekscript").unwrap_or(&opts);
                 apply_config_from_value(&mut settings, config_obj);
             }
+            self.reload_signatures_from_config();
             self.log_trace("leekscript-lsp: applied initialization options".to_string())
                 .await;
         }
@@ -100,6 +101,7 @@ impl LanguageServer for Backend {
                 apply_config_from_value(&mut settings, config_obj);
             }
         }
+        self.reload_signatures_from_config();
         self.client
             .log_message(
                 MessageType::INFO,
@@ -121,6 +123,7 @@ impl LanguageServer for Backend {
             .unwrap_or(&params.settings);
         let mut settings = self.settings.write();
         apply_config_from_value(&mut settings, config_obj);
+        self.reload_signatures_from_config();
     }
 
     async fn shutdown(&self) -> Result<()> {

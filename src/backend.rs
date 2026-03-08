@@ -13,6 +13,7 @@ use crate::config::LspSettings;
 use crate::document::DocumentState;
 use crate::util::{parse_uri, uri_to_path};
 use leekscript_rs::lsp::DocumentAnalysisLspExt;
+use leekscript_rs::signatures;
 use leekscript_rs::DocumentAnalysis;
 
 /// Runs full analysis (parse + scope + type checking) on a blocking thread. Returns (uri, analysis).
@@ -35,14 +36,15 @@ fn run_analysis_blocking(
     (uri, analysis)
 }
 
+/// Signature state (roots + definition locations) loaded from .sig files. Updated from init options.
+pub type SignatureState = (Vec<SyntaxNode>, HashMap<String, (PathBuf, u32)>);
+
 pub struct Backend {
     pub client: Client,
     pub documents: RwLock<HashMap<String, DocumentState>>,
     pub settings: RwLock<LspSettings>,
-    /// Pre-loaded stdlib/API signature roots (e.g. from `default_signature_roots()`). Shared across analysis runs.
-    pub signature_roots: Arc<Vec<SyntaxNode>>,
-    /// Function/global name -> (path, line) from .sig files for hover links (e.g. getCellX, getCellY).
-    pub sig_definition_locations: Arc<HashMap<String, (PathBuf, u32)>>,
+    /// Pre-loaded stdlib/API signature roots and locations. Updated in initialize from client config.
+    pub signature_state: Arc<RwLock<SignatureState>>,
 }
 
 impl Backend {
@@ -65,18 +67,11 @@ impl Backend {
         ))
         .await;
 
-        let signature_roots = Arc::clone(&self.signature_roots);
-        let sig_definition_locations = Arc::clone(&self.sig_definition_locations);
+        let (roots, locs) = self.signature_state.read().clone();
         let result = tokio::task::spawn_blocking(move || {
             let uri_for_fail = uri.clone();
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_analysis_blocking(
-                    uri,
-                    source,
-                    existing_root,
-                    &signature_roots,
-                    &sig_definition_locations,
-                )
+                run_analysis_blocking(uri, source, existing_root, &roots, &locs)
             })) {
                 Ok(ok) => Ok(ok),
                 Err(_) => Err(uri_for_fail),
@@ -114,12 +109,13 @@ impl Backend {
                 if parse_uri(&uri).is_some() {
                     if let Some(path) = uri_to_path(&uri) {
                         if let Ok(source) = std::fs::read_to_string(&path) {
+                            let (roots, locs) = self.signature_state.read().clone();
                             let recovery = DocumentAnalysis::new(
                                 &source,
                                 None,
-                                &self.signature_roots,
+                                &roots,
                                 None,
-                                Some((*self.sig_definition_locations).clone()),
+                                Some(locs),
                             );
                             let diags = recovery.lsp_diagnostics(Some(&uri));
                             {
@@ -150,5 +146,34 @@ impl Backend {
         if self.settings.read().trace {
             let () = self.client.log_message(MessageType::LOG, msg).await;
         }
+    }
+
+    /// Reload signature state from current settings (signature_paths or default stdlib paths).
+    /// Call this after applying initialization options or did_change_configuration.
+    pub(crate) fn reload_signatures_from_config(&self) {
+        let (paths_opt, load_stdlib) = {
+            let s = self.settings.read();
+            (s.signature_paths.clone(), s.load_stdlib_signatures)
+        };
+
+        let (roots, locations) = if let Some(ref paths) = paths_opt {
+            if paths.is_empty() {
+                if load_stdlib {
+                    signatures::default_signature_roots_with_locations()
+                } else {
+                    (Vec::new(), HashMap::new())
+                }
+            } else {
+                let path_bufs: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+                signatures::load_signatures_from_paths_with_locations(&path_bufs)
+            }
+        } else if load_stdlib {
+            signatures::default_signature_roots_with_locations()
+        } else {
+            (Vec::new(), HashMap::new())
+        };
+
+        let mut state = self.signature_state.write();
+        *state = (roots, locations);
     }
 }

@@ -27,15 +27,13 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (signature_roots, sig_definition_locations) = default_signature_roots_with_locations();
-    let signature_roots = Arc::new(signature_roots);
-    let sig_definition_locations = Arc::new(sig_definition_locations);
+    let initial_sig_state = default_signature_roots_with_locations();
+    let signature_state = Arc::new(RwLock::new(initial_sig_state));
     let (service, socket) = LspService::new(|client| Backend {
         client,
         documents: RwLock::new(HashMap::new()),
         settings: RwLock::new(LspSettings::default()),
-        signature_roots,
-        sig_definition_locations,
+        signature_state,
     });
     Server::new(stdin, stdout, socket).serve(service).await;
 }
