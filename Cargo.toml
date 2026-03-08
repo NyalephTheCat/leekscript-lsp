@@ -20,7 +20,7 @@ name = "leekscript-lsp"
 path = "src/main.rs"
 
 [dependencies]
-leekscript-rs = { version = "0.1", features = ["utf16", "lsp"] }
+leekscript-rs = { version = "0.1.1-alpha", features = ["utf16", "lsp"] }
 parking_lot = "0.12"
 sipha = { version = "2.0.0", features = ["utf16"] }
 tower-lsp = "0.20"

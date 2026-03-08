@@ -11,3 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CONTRIBUTING.md: pointer to root contributing guide and workflow.
 - README: Development section and link to CONTRIBUTING.
+
+### Changed
+
+- Bump leekscript-rs dependency to 0.1.1-alpha.
