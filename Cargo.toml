@@ -9,7 +9,7 @@ repository = "https://github.com/leek-wars/leekscript-lsp"
 homepage = "https://github.com/leek-wars/leekscript-lsp"
 documentation = "https://docs.rs/leekscript-lsp"
 keywords = ["leekscript", "lsp", "language-server", "leek-wars"]
-categories = ["development-tools", "language-implementations"]
+categories = ["development-tools", "parser-implementations"]
 
 [lib]
 name = "leekscript_lsp"

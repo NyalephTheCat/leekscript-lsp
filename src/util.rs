@@ -22,6 +22,7 @@ pub fn uri_to_path(uri: &str) -> Option<PathBuf> {
 }
 
 /// Convert a file path to an LSP document URI. Returns None if the path cannot be represented as a file URL.
+#[allow(dead_code)]
 #[must_use]
 pub fn path_to_uri(path: &Path) -> Option<Url> {
     Url::from_file_path(path).ok()
