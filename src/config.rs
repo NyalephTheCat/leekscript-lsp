@@ -26,7 +26,10 @@ pub fn apply_config_from_value(settings: &mut LspSettings, value: &serde_json::V
     if let Some(b) = value.get("trace").and_then(serde_json::Value::as_bool) {
         settings.trace = b;
     }
-    if let Some(arr) = value.get("signatureFiles").and_then(serde_json::Value::as_array) {
+    if let Some(arr) = value
+        .get("signatureFiles")
+        .and_then(serde_json::Value::as_array)
+    {
         let paths: Vec<String> = arr
             .iter()
             .filter_map(|v| v.as_str().map(String::from))

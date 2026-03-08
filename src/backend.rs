@@ -111,13 +111,8 @@ impl Backend {
                     if let Some(path) = uri_to_path(&uri) {
                         if let Ok(source) = std::fs::read_to_string(&path) {
                             let (roots, locs) = self.signature_state.read().clone();
-                            let recovery = DocumentAnalysis::new(
-                                &source,
-                                None,
-                                &roots,
-                                None,
-                                Some(locs),
-                            );
+                            let recovery =
+                                DocumentAnalysis::new(&source, None, &roots, None, Some(locs));
                             let diags = recovery.lsp_diagnostics(Some(&uri));
                             {
                                 let mut docs = self.documents.write();

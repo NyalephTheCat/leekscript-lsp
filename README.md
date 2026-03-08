@@ -42,3 +42,16 @@ Configure via workspace settings or `initializationOptions` under the `leekscrip
 | Option | Description | Default |
 |--------|-------------|---------|
 | `trace` | Send verbose (LOG) messages for each request to the LSP output. | `false` |
+
+## Development
+
+From the **repository root**:
+
+```bash
+cargo build -p leekscript-lsp
+cargo test -p leekscript-lsp
+cargo fmt --all -- --check
+cargo clippy --workspace --all-features -- -D warnings
+```
+
+See the root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [cursor.md](../../cursor.md) for conventions and workflow.
