@@ -2,6 +2,13 @@
 name = "leekscript-lsp"
 version = "0.1.0"
 edition = "2021"
+description = "Language server for LeekScript (LSP)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/leek-wars/leekscript-rs"
+
+[lib]
+name = "leekscript_lsp"
+path = "src/lib.rs"
 
 [[bin]]
 name = "leekscript-lsp"
@@ -10,7 +17,7 @@ path = "src/main.rs"
 [dependencies]
 leekscript-rs = { path = "../leekscript-rs", features = ["utf16", "lsp"] }
 parking_lot = "0.12"
-sipha = { path = "../sipha/sipha", features = ["utf16"] }
+sipha = { version = "2.0.0", features = ["utf16"] }
 tower-lsp = "0.20"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
