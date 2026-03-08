@@ -7,7 +7,7 @@ pub struct LspSettings {
     /// Paths to .sig files or directories of .sig files (from leekscript.signatureFiles).
     /// When set by the client, the LSP loads signatures from these paths at initialize.
     pub signature_paths: Option<Vec<String>>,
-    /// When true and no signature_paths provided, try default env/dir (LEEKSCRIPT_SIGNATURES_DIR or examples/signatures).
+    /// When true and no `signature_paths` provided, try default env/dir (`LEEKSCRIPT_SIGNATURES_DIR` or examples/signatures).
     pub load_stdlib_signatures: bool,
 }
 

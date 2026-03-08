@@ -184,15 +184,12 @@ impl LanguageServer for Backend {
             }
         };
 
-        let (new_source, root) = match result {
-            None => {
-                self.log_trace(format!(
-                    "leekscript-lsp: did_change for unknown document uri={uri}, skipping"
-                ))
-                .await;
-                return;
-            }
-            Some(r) => r,
+        let Some((new_source, root)) = result else {
+            self.log_trace(format!(
+                "leekscript-lsp: did_change for unknown document uri={uri}, skipping"
+            ))
+            .await;
+            return;
         };
         self.log_trace(format!(
             "leekscript-lsp: did_change uri={uri} applied (incremental reparse when possible)"
@@ -272,7 +269,7 @@ impl LanguageServer for Backend {
         let r = params.range;
         let source = state.source.as_str();
         let line_index = &state.line_index;
-        let byte_end_default = state.source.len() as u32;
+        let byte_end_default = u32::try_from(state.source.len()).unwrap_or(u32::MAX);
         let byte_start =
             line_col_utf16_to_byte(source, line_index, r.start.line, r.start.character)
                 .unwrap_or(0);
@@ -299,7 +296,7 @@ impl LanguageServer for Backend {
         let r = params.range;
         let source = state.source.as_str();
         let line_index = &state.line_index;
-        let byte_end_default = state.source.len() as u32;
+        let byte_end_default = u32::try_from(state.source.len()).unwrap_or(u32::MAX);
         let byte_start =
             line_col_utf16_to_byte(source, line_index, r.start.line, r.start.character)
                 .unwrap_or(0);
@@ -388,9 +385,8 @@ impl LanguageServer for Backend {
         self.log_trace(format!("leekscript-lsp: rename uri={uri}"))
             .await;
         let docs = self.documents.read();
-        let state = match docs.get(&uri) {
-            Some(s) => s,
-            None => return Ok(None),
+        let Some(state) = docs.get(&uri) else {
+            return Ok(None);
         };
         let position = params.text_document_position.position;
         let new_name = params.new_name;

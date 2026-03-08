@@ -18,6 +18,7 @@ use leekscript_rs::DocumentAnalysis;
 
 /// Runs full analysis (parse + scope + type checking) on a blocking thread. Returns (uri, analysis).
 /// Uses `main_path` from URI when available; `signature_roots` seed the scope with stdlib/API definitions when provided.
+#[allow(clippy::needless_pass_by_value)]
 fn run_analysis_blocking(
     uri: String,
     source: String,
@@ -148,8 +149,8 @@ impl Backend {
         }
     }
 
-    /// Reload signature state from current settings (signature_paths or default stdlib paths).
-    /// Call this after applying initialization options or did_change_configuration.
+    /// Reload signature state from current settings (`signature_paths` or default stdlib paths).
+    /// Call this after applying initialization options or `did_change_configuration`.
     pub(crate) fn reload_signatures_from_config(&self) {
         let (paths_opt, load_stdlib) = {
             let s = self.settings.read();
