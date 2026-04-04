@@ -5,9 +5,7 @@ edition = "2021"
 description = "Language server for LeekScript (LSP)"
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/leek-wars/leekscript-lsp"
-homepage = "https://github.com/leek-wars/leekscript-lsp"
-documentation = "https://docs.rs/leekscript-lsp"
+repository = "https://github.com/NyalephTheCat/leekscript-lsp"
 keywords = ["leekscript", "lsp", "language-server", "leek-wars"]
 categories = ["development-tools", "parser-implementations"]
 
@@ -20,10 +18,12 @@ name = "leekscript-lsp"
 path = "src/main.rs"
 
 [dependencies]
-leekscript-rs = { version = "0.1.1-alpha", features = ["utf16", "lsp"] }
+leekscript = { path = "../leekscript", features = ["utf16"] }
+lsp-types = "0.94"
 parking_lot = "0.12"
-sipha = { version = "2.0.0", features = ["utf16"] }
+sipha = { path = "../../sipha/sipha", default-features = false, features = ["std", "utf16"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
 tower-lsp = "0.20"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+
+[dev-dependencies]
+lsp-types = "0.94"

@@ -23,25 +23,18 @@ The server talks LSP over stdio. Configure your editor to run the `leekscript-ls
 
 Point your LSP client at the `leekscript-lsp` executable. The server supports:
 
-- **textDocument/didOpen**, **didChange**, **didClose** — incremental text sync; parses on open/change for semantic tokens.
-- **textDocument/semanticTokens/full** — semantic tokens for the whole document (syntax highlighting).
-- **textDocument/semanticTokens/range** — semantic tokens for a range (e.g. visible region).
+- **textDocument/didOpen**, **didChange**, **didClose** — full-document sync (buffer kept in memory).
+- **textDocument/semanticTokens/full** — semantic tokens for highlighting (parses the buffer on each request).
 
-## Configuration
+Highlighting uses standard LSP semantic token kinds (`keyword`, `string`, `number`, `comment`, `operator`, `type`, `variable`).
 
-Configure via workspace settings or `initializationOptions` under the `leekscript` key. Example:
+- **Comments:** Any multiline `/* … */` or `// …` trivia that contains newlines is split into **one semantic token per visual line** (plain comments keep the `comment` kind only).
+- **Docstrings:** `///`, `//!`, and `/** … */` (except empty `/**/`) use `comment` + the `documentation` modifier.
+- **Doxygen:** Inside doc lines, `\` / `@` command tokens use `leekscript::syntax::doxygen_command_byte_ranges` (same scanner as `parse_doxygen`). Those spans use the standard LSP token type **`decorator`** (like TypeScript `@` annotations) plus the **`documentation`** modifier; prose in the same line stays **`comment`** + `documentation`.
 
-```json
-{
-  "leekscript": {
-    "trace": false
-  }
-}
-```
+Use `editor.semanticTokenColorCustomizations` / `semanticTokenScopes` in VS Code to tune `decorator.documentation` vs `comment.documentation` if needed.
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `trace` | Send verbose (LOG) messages for each request to the LSP output. | `false` |
+Signature stub files are detected from the document URI (same rules as `leekscript::is_signature_stub_path`: names ending in `.sig.leek` or containing `.sig.` before `.leek`). Those buffers are parsed in **signature mode** so `function … => T;` stubs tokenize like normal LeekScript.
 
 ## Development
 

@@ -1,6 +1,8 @@
-//! Library surface for leekscript-lsp (used by integration tests and potentially other tools).
-//!
-//! The main binary is in `main.rs`; this crate re-exports types needed for testing the
-//! parse/reparse + analysis pipeline.
+//! Library surface for tests: semantic tokens from in-tree [`leekscript`] parse.
 
-pub use leekscript_rs::{parse, reparse, reparse_or_parse, DocumentAnalysis, TextEdit};
+mod semantic_tokens;
+
+pub use semantic_tokens::{
+    semantic_token_legend, semantic_tokens_for_document, semantic_tokens_for_source,
+    signature_mode_for_uri,
+};
