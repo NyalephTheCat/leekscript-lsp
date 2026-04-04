@@ -1,5 +1,6 @@
 //! Library surface for tests: semantic tokens from in-tree [`leekscript`] parse.
 
+mod token_context;
 mod semantic_tokens;
 
 pub use semantic_tokens::{

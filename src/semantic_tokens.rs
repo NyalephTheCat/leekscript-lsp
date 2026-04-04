@@ -9,8 +9,10 @@ use lsp_types::{
 };
 use sipha::diagnostics::parsed_doc::ParsedDoc;
 use sipha::diagnostics::utf16::{span_to_utf16_range, utf16_len};
-use sipha::tree::red::SyntaxToken;
+use sipha::tree::red::{SyntaxNode, SyntaxToken};
 use sipha::types::{Pos, Span};
+
+use crate::token_context::{IdentTypePosition, TokenScopeSite};
 
 /// [`SemanticTokenType::COMMENT`] index in [`semantic_token_legend`].
 const TY_COMMENT: u32 = 3;
@@ -19,6 +21,17 @@ const TY_DECORATOR: u32 = 7;
 
 /// Modifier bit for [`SemanticTokenModifier::DOCUMENTATION`] (legend index `0`).
 const MOD_DOCUMENTATION: u32 = 1 << 0;
+/// Modifier bit for [`SemanticTokenModifier::DEFAULT_LIBRARY`] (legend index `1`).
+const MOD_DEFAULT_LIBRARY: u32 = 1 << 1;
+
+/// [`SemanticTokenType::TYPE`] index in [`semantic_token_legend`].
+const TY_TYPE: u32 = 5;
+/// [`SemanticTokenType::VARIABLE`] index in [`semantic_token_legend`].
+const TY_VARIABLE: u32 = 6;
+/// [`SemanticTokenType::OPERATOR`] index in [`semantic_token_legend`].
+const TY_OPERATOR: u32 = 4;
+/// [`SemanticTokenType::TYPE_PARAMETER`] index in [`semantic_token_legend`].
+const TY_TYPE_PARAMETER: u32 = 8;
 
 /// Legend indices must match [`leek_token_semantics`] and [`emit_documentation_line`].
 pub fn semantic_token_legend() -> SemanticTokensLegend {
@@ -32,8 +45,12 @@ pub fn semantic_token_legend() -> SemanticTokensLegend {
             SemanticTokenType::TYPE,
             SemanticTokenType::VARIABLE,
             SemanticTokenType::DECORATOR,
+            SemanticTokenType::TYPE_PARAMETER,
         ],
-        token_modifiers: vec![SemanticTokenModifier::DOCUMENTATION],
+        token_modifiers: vec![
+            SemanticTokenModifier::DOCUMENTATION,
+            SemanticTokenModifier::DEFAULT_LIBRARY,
+        ],
     }
 }
 
@@ -345,83 +362,126 @@ fn is_control_keyword(k: K) -> bool {
     )
 }
 
-fn leek_token_semantics(token: &SyntaxToken) -> Option<(u32, u32)> {
+#[inline]
+fn operator_family_token_type(k: K, in_type_ctx: bool, in_tpl: bool) -> u32 {
+    if in_type_ctx
+        && matches!(
+            k,
+            K::Lt | K::Gt | K::BitOr | K::Question | K::Comma | K::Arrow
+        )
+    {
+        return if in_tpl {
+            TY_TYPE_PARAMETER
+        } else {
+            TY_TYPE
+        };
+    }
+    TY_OPERATOR
+}
+
+/// Punctuation and operator tokens mapped to [`TY_OPERATOR`] by default, with type-context overrides.
+fn is_operator_syntax_token(k: K) -> bool {
+    matches!(
+        k,
+        K::Coalesce
+            | K::CoalesceEq
+            | K::StarStar
+            | K::StarStarEq
+            | K::Backslash
+            | K::BackslashEq
+            | K::Shl
+            | K::Shr
+            | K::UShr
+            | K::ShlEq
+            | K::ShrEq
+            | K::UShrEq
+            | K::TripleShl
+            | K::TripleShlEq
+            | K::BitAnd
+            | K::BitOr
+            | K::BitXor
+            | K::BitAndEq
+            | K::BitOrEq
+            | K::BitXorEq
+            | K::Question
+            | K::Semi
+            | K::Comma
+            | K::Colon
+            | K::Dot
+            | K::DotDot
+            | K::Arrow
+            | K::Eq
+            | K::Plus
+            | K::Minus
+            | K::Star
+            | K::Slash
+            | K::Percent
+            | K::PlusEq
+            | K::MinusEq
+            | K::StarEq
+            | K::SlashEq
+            | K::PercentEq
+            | K::EqEq
+            | K::NotEq
+            | K::EqEqEq
+            | K::NotEqEq
+            | K::Lt
+            | K::Lte
+            | K::Gt
+            | K::Gte
+            | K::AndAnd
+            | K::OrOr
+            | K::Bang
+            | K::Tilde
+            | K::PlusPlus
+            | K::MinusMinus
+            | K::LParen
+            | K::RParen
+            | K::LBracket
+            | K::RBracket
+            | K::LBrace
+            | K::RBrace
+            | K::Operator
+    )
+}
+
+fn leek_token_semantics(root: &SyntaxNode, token: &SyntaxToken) -> Option<(u32, u32)> {
     let k = token.kind_as::<K>()?;
     let text = token.text();
     let bytes = text.as_bytes();
+    let site = TokenScopeSite::new(root, token);
+    let in_type_ctx = site.as_ref().is_some_and(TokenScopeSite::in_type_syntax);
+    let in_tpl = site.as_ref().is_some_and(TokenScopeSite::in_template_params);
     let ty = match k {
         K::Ws | K::Trivia => return None,
         K::LineComment | K::BlockComment => TY_COMMENT,
         K::String => 1,
         K::Number | K::Pi | K::Infinity | K::TrueKw | K::FalseKw | K::NullKw => 2,
-        K::Ident => 6,
-        k if is_type_keyword(k) => 5,
+        K::Ident => {
+            if in_type_ctx {
+                match site
+                    .as_ref()
+                    .and_then(TokenScopeSite::classify_ident_in_type_position)
+                {
+                    Some(IdentTypePosition::TemplateParameter) => TY_TYPE_PARAMETER,
+                    _ => TY_TYPE,
+                }
+            } else {
+                TY_VARIABLE
+            }
+        }
+        k if is_type_keyword(k) => TY_TYPE,
         k if is_control_keyword(k) => 0,
-        K::Coalesce
-        | K::CoalesceEq
-        | K::StarStar
-        | K::StarStarEq
-        | K::Backslash
-        | K::BackslashEq
-        | K::Shl
-        | K::Shr
-        | K::UShr
-        | K::ShlEq
-        | K::ShrEq
-        | K::UShrEq
-        | K::TripleShl
-        | K::TripleShlEq
-        | K::BitAnd
-        | K::BitOr
-        | K::BitXor
-        | K::BitAndEq
-        | K::BitOrEq
-        | K::BitXorEq
-        | K::Question
-        | K::Semi
-        | K::Comma
-        | K::Colon
-        | K::Dot
-        | K::DotDot
-        | K::Arrow
-        | K::Eq
-        | K::Plus
-        | K::Minus
-        | K::Star
-        | K::Slash
-        | K::Percent
-        | K::PlusEq
-        | K::MinusEq
-        | K::StarEq
-        | K::SlashEq
-        | K::PercentEq
-        | K::EqEq
-        | K::NotEq
-        | K::EqEqEq
-        | K::NotEqEq
-        | K::Lt
-        | K::Lte
-        | K::Gt
-        | K::Gte
-        | K::AndAnd
-        | K::OrOr
-        | K::Bang
-        | K::Tilde
-        | K::PlusPlus
-        | K::MinusMinus
-        | K::LParen
-        | K::RParen
-        | K::LBracket
-        | K::RBracket
-        | K::LBrace
-        | K::RBrace
-        | K::Operator => 4,
+        k if is_operator_syntax_token(k) => operator_family_token_type(k, in_type_ctx, in_tpl),
         _ => return None,
     };
-    let mods = match k {
+    let mut mods = match k {
         K::LineComment | K::BlockComment => documentation_modifier_bitset(bytes),
         _ => 0,
     };
+    if is_type_keyword(k) {
+        mods |= MOD_DEFAULT_LIBRARY;
+    }
     Some((ty, mods))
 }
 
@@ -444,8 +504,9 @@ fn semantic_tokens_from_parsed_doc(doc: &ParsedDoc) -> SemanticTokens {
     let mut data: Vec<SemanticToken> = Vec::new();
     let mut state = EncodeState::default();
 
-    for t in doc.root().descendant_tokens() {
-        let Some((ty, mods)) = leek_token_semantics(&t) else {
+    let root = doc.root();
+    for t in root.descendant_tokens() {
+        let Some((ty, mods)) = leek_token_semantics(root, &t) else {
             continue;
         };
         let span = t.text_range();
