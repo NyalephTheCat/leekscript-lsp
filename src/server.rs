@@ -1,16 +1,17 @@
-//! LSP server: full-document sync, diagnostics, and semantic tokens.
+//! LSP server: full-document sync, diagnostics, semantic tokens, and formatting.
 
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
-    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
-    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
-    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentSyncKind, WorkDoneProgressOptions,
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
+    DocumentRangeFormattingParams, InitializeParams, InitializeResult, OneOf, SemanticTokensFullOptions, TextEdit,
+    SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities,
+    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, WorkDoneProgressOptions,
 };
 use tower_lsp::LanguageServer;
 
 use crate::backend::{Backend, InitOptions};
 use crate::diagnostics;
+use crate::formatting;
 use crate::semantic_tokens::{semantic_token_legend, semantic_tokens_for_document};
 
 #[tower_lsp::async_trait]
@@ -35,6 +36,8 @@ impl LanguageServer for Backend {
                         work_done_progress_options: WorkDoneProgressOptions::default(),
                     },
                 )),
+                document_formatting_provider: Some(OneOf::Left(true)),
+                document_range_formatting_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -96,5 +99,39 @@ impl LanguageServer for Backend {
         .await
         .unwrap_or_default();
         Ok(Some(SemanticTokensResult::Tokens(tokens)))
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri.to_string();
+        let Some(source) = self.documents.read().get(&uri).cloned() else {
+            return Ok(None);
+        };
+        let opts = params.options;
+        let edits = tokio::task::spawn_blocking(move || {
+            formatting::formatting_edits(&source, Some(uri.as_str()), &opts)
+        })
+        .await
+        .ok()
+        .flatten();
+        Ok(edits)
+    }
+
+    async fn range_formatting(
+        &self,
+        params: DocumentRangeFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri.to_string();
+        let Some(source) = self.documents.read().get(&uri).cloned() else {
+            return Ok(None);
+        };
+        let opts = params.options;
+        let range = params.range;
+        let edits = tokio::task::spawn_blocking(move || {
+            formatting::range_formatting_edits(&source, Some(uri.as_str()), &opts, &range)
+        })
+        .await
+        .ok()
+        .flatten();
+        Ok(edits)
     }
 }

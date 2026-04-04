@@ -8,6 +8,8 @@
 mod convert;
 mod workspace;
 
+pub(crate) use convert::{full_document_range, span_to_range_in_source};
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 

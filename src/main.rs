@@ -4,6 +4,7 @@
 
 mod backend;
 mod diagnostics;
+mod formatting;
 mod token_context;
 mod semantic_tokens;
 mod server;

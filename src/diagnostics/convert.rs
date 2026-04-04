@@ -49,6 +49,12 @@ pub(crate) fn span_to_range_in_source(source: &str, span: Span) -> Range {
     }
 }
 
+/// LSP range covering the entire UTF-8 buffer (byte offsets → UTF-16 line/character).
+#[must_use]
+pub(crate) fn full_document_range(source: &str) -> Range {
+    span_to_range_in_source(source, Span::new(0, source.len() as u32))
+}
+
 pub(crate) fn sipha_diagnostic_message(d: &SiphaDiagnostic, source: &str) -> String {
     let idx = LineIndex::new(source.as_bytes());
     let graph = grammar::built_graph().as_graph();
