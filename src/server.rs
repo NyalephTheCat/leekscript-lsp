@@ -3,14 +3,16 @@
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
-    DocumentRangeFormattingParams, InitializeParams, InitializeResult, OneOf, SemanticTokensFullOptions, TextEdit,
-    SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, WorkDoneProgressOptions,
+    DocumentRangeFormattingParams, FoldingRange, FoldingRangeParams, InitializeParams, InitializeResult, OneOf,
+    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
+    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
+    WorkDoneProgressOptions,
 };
 use tower_lsp::LanguageServer;
 
 use crate::backend::{Backend, InitOptions};
 use crate::diagnostics;
+use crate::folding;
 use crate::formatting;
 use crate::semantic_tokens::{semantic_token_legend, semantic_tokens_for_document};
 
@@ -38,6 +40,7 @@ impl LanguageServer for Backend {
                 )),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 document_range_formatting_provider: Some(OneOf::Left(true)),
+                folding_range_provider: Some(true.into()),
                 ..Default::default()
             },
             ..Default::default()
@@ -114,6 +117,17 @@ impl LanguageServer for Backend {
         .ok()
         .flatten();
         Ok(edits)
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = params.text_document.uri.to_string();
+        let Some(source) = self.documents.read().get(&uri).cloned() else {
+            return Ok(None);
+        };
+        let ranges = tokio::task::spawn_blocking(move || folding::folding_ranges_for_document(&source, Some(uri.as_str())))
+            .await
+            .unwrap_or_default();
+        Ok(Some(ranges))
     }
 
     async fn range_formatting(
