@@ -4,7 +4,7 @@ use leekscript::parse::{
     language_options_with_source_directives, parse_doc_with_recovery,
     parse_signature_doc_with_recovery, LanguageOptions,
 };
-use leekscript::syntax::kinds::K;
+use leekscript::syntax::kinds::Node;
 use lsp_types::{FoldingRange, FoldingRangeKind};
 use sipha::diagnostics::parsed_doc::ParsedDoc;
 use sipha::tree::red::SyntaxNode;
@@ -28,7 +28,7 @@ pub fn folding_ranges_for_document(source: &str, document_uri: Option<&str>) -> 
 }
 
 fn folding_ranges_from_parsed(doc: &ParsedDoc) -> Vec<FoldingRange> {
-    let kind_block = K::Block.into_syntax_kind();
+    let kind_block = Node::Block.into_syntax_kind();
     let mut out = Vec::new();
     for node in doc.root().descendant_nodes() {
         if node.kind() == kind_block {

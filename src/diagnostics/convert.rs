@@ -58,7 +58,7 @@ pub(crate) fn full_document_range(source: &str) -> Range {
 pub(crate) fn sipha_diagnostic_message(d: &SiphaDiagnostic, source: &str) -> String {
     let idx = LineIndex::new(source.as_bytes());
     let graph = grammar::built_graph().as_graph();
-    d.format_with_source(
+    d.format_with_source_deduped_expected(
         source.as_bytes(),
         &idx,
         Some(&graph.literals),

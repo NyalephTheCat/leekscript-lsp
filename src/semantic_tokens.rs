@@ -3,14 +3,14 @@
 use leekscript::parse::{
     LanguageOptions, parse_doc_with_recovery, parse_signature_doc_with_recovery,
 };
-use leekscript::syntax::kinds::K;
+use leekscript::syntax::kinds::{K, Lex, Node};
 use lsp_types::{
     SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens, SemanticTokensLegend, Url,
 };
 use sipha::diagnostics::parsed_doc::ParsedDoc;
 use sipha::diagnostics::utf16::{span_to_utf16_range, utf16_len};
 use sipha::tree::red::{SyntaxNode, SyntaxToken};
-use sipha::types::{Pos, Span};
+use sipha::types::{FromSyntaxKind, Pos, Span};
 
 use crate::token_context::{IdentTypePosition, TokenScopeSite};
 
@@ -273,101 +273,101 @@ fn push_semantic_token(
     });
 }
 
-fn is_type_keyword(k: K) -> bool {
+fn is_type_keyword(l: Lex) -> bool {
     matches!(
-        k,
-        K::VoidKw
-            | K::BooleanKw
-            | K::AnyKw
-            | K::IntegerKw
-            | K::RealKw
-            | K::StringTypeKw
-            | K::ClassTypeKw
-            | K::ObjectKw
-            | K::ArrayKw
-            | K::SetTypeKw
-            | K::MapKw
-            | K::FunctionTypeKw
-            | K::IntervalKw
+        l,
+        Lex::VoidKw
+            | Lex::BooleanKw
+            | Lex::AnyKw
+            | Lex::IntegerKw
+            | Lex::RealKw
+            | Lex::StringTypeKw
+            | Lex::ClassTypeKw
+            | Lex::ObjectKw
+            | Lex::ArrayKw
+            | Lex::SetTypeKw
+            | Lex::MapKw
+            | Lex::FunctionTypeKw
+            | Lex::IntervalKw
     )
 }
 
-fn is_control_keyword(k: K) -> bool {
+fn is_control_keyword(l: Lex) -> bool {
     matches!(
-        k,
-        K::VarKw
-            | K::LetKw
-            | K::BreakKw
-            | K::ContinueKw
-            | K::DoKw
-            | K::ReturnKw
-            | K::FunctionKw
-            | K::IfKw
-            | K::ElseKw
-            | K::ForKw
-            | K::WhileKw
-            | K::IncludeKw
-            | K::MatchKw
-            | K::InKw
-            | K::AsKw
-            | K::ClassKw
-            | K::NewKw
-            | K::ThisKw
-            | K::SuperKw
-            | K::SwitchKw
-            | K::CaseKw
-            | K::DefaultKw
-            | K::GlobalKw
-            | K::ExtendsKw
-            | K::PublicKw
-            | K::PrivateKw
-            | K::ProtectedKw
-            | K::StaticKw
-            | K::FinalKw
-            | K::ConstructorKw
-            | K::IsKw
-            | K::InstanceofKw
-            | K::XorKw
-            | K::NotKw
-            | K::AbstractKw
-            | K::AwaitKw
-            | K::ByteKw
-            | K::CatchKw
-            | K::CharKw
-            | K::ConstKw
-            | K::DoubleKw
-            | K::EnumKw
-            | K::EvalKw
-            | K::ExportKw
-            | K::FinallyKw
-            | K::FloatKw
-            | K::GotoKw
-            | K::ImplementsKw
-            | K::ImportKw
-            | K::IntKw
-            | K::InterfaceKw
-            | K::LongKw
-            | K::NativeKw
-            | K::PackageKw
-            | K::ShortKw
-            | K::SynchronizedKw
-            | K::ThrowKw
-            | K::ThrowsKw
-            | K::TransientKw
-            | K::TryKw
-            | K::TypeofKw
-            | K::VolatileKw
-            | K::WithKw
-            | K::YieldKw
+        l,
+        Lex::VarKw
+            | Lex::LetKw
+            | Lex::BreakKw
+            | Lex::ContinueKw
+            | Lex::DoKw
+            | Lex::ReturnKw
+            | Lex::FunctionKw
+            | Lex::IfKw
+            | Lex::ElseKw
+            | Lex::ForKw
+            | Lex::WhileKw
+            | Lex::IncludeKw
+            | Lex::MatchKw
+            | Lex::InKw
+            | Lex::AsKw
+            | Lex::ClassKw
+            | Lex::NewKw
+            | Lex::ThisKw
+            | Lex::SuperKw
+            | Lex::SwitchKw
+            | Lex::CaseKw
+            | Lex::DefaultKw
+            | Lex::GlobalKw
+            | Lex::ExtendsKw
+            | Lex::PublicKw
+            | Lex::PrivateKw
+            | Lex::ProtectedKw
+            | Lex::StaticKw
+            | Lex::FinalKw
+            | Lex::ConstructorKw
+            | Lex::IsKw
+            | Lex::InstanceofKw
+            | Lex::XorKw
+            | Lex::NotKw
+            | Lex::AbstractKw
+            | Lex::AwaitKw
+            | Lex::ByteKw
+            | Lex::CatchKw
+            | Lex::CharKw
+            | Lex::ConstKw
+            | Lex::DoubleKw
+            | Lex::EnumKw
+            | Lex::EvalKw
+            | Lex::ExportKw
+            | Lex::FinallyKw
+            | Lex::FloatKw
+            | Lex::GotoKw
+            | Lex::ImplementsKw
+            | Lex::ImportKw
+            | Lex::IntKw
+            | Lex::InterfaceKw
+            | Lex::LongKw
+            | Lex::NativeKw
+            | Lex::PackageKw
+            | Lex::ShortKw
+            | Lex::SynchronizedKw
+            | Lex::ThrowKw
+            | Lex::ThrowsKw
+            | Lex::TransientKw
+            | Lex::TryKw
+            | Lex::TypeofKw
+            | Lex::VolatileKw
+            | Lex::WithKw
+            | Lex::YieldKw
     )
 }
 
 #[inline]
-fn operator_family_token_type(k: K, in_type_ctx: bool, in_tpl: bool) -> u32 {
+fn operator_family_token_type(l: Lex, in_type_ctx: bool, in_tpl: bool) -> u32 {
     if in_type_ctx
         && matches!(
-            k,
-            K::Lt | K::Gt | K::BitOr | K::Question | K::Comma | K::Arrow
+            l,
+            Lex::Lt | Lex::Gt | Lex::BitOr | Lex::Question | Lex::Comma | Lex::Arrow
         )
     {
         return if in_tpl {
@@ -380,84 +380,86 @@ fn operator_family_token_type(k: K, in_type_ctx: bool, in_tpl: bool) -> u32 {
 }
 
 /// Punctuation and operator tokens mapped to [`TY_OPERATOR`] by default, with type-context overrides.
-fn is_operator_syntax_token(k: K) -> bool {
+fn is_operator_syntax_token(l: Lex) -> bool {
     matches!(
-        k,
-        K::Coalesce
-            | K::CoalesceEq
-            | K::StarStar
-            | K::StarStarEq
-            | K::Backslash
-            | K::BackslashEq
-            | K::Shl
-            | K::Shr
-            | K::UShr
-            | K::ShlEq
-            | K::ShrEq
-            | K::UShrEq
-            | K::TripleShl
-            | K::TripleShlEq
-            | K::BitAnd
-            | K::BitOr
-            | K::BitXor
-            | K::BitAndEq
-            | K::BitOrEq
-            | K::BitXorEq
-            | K::Question
-            | K::Semi
-            | K::Comma
-            | K::Colon
-            | K::Dot
-            | K::DotDot
-            | K::Arrow
-            | K::Eq
-            | K::Plus
-            | K::Minus
-            | K::Star
-            | K::Slash
-            | K::Percent
-            | K::PlusEq
-            | K::MinusEq
-            | K::StarEq
-            | K::SlashEq
-            | K::PercentEq
-            | K::EqEq
-            | K::NotEq
-            | K::EqEqEq
-            | K::NotEqEq
-            | K::Lt
-            | K::Lte
-            | K::Gt
-            | K::Gte
-            | K::AndAnd
-            | K::OrOr
-            | K::Bang
-            | K::Tilde
-            | K::PlusPlus
-            | K::MinusMinus
-            | K::LParen
-            | K::RParen
-            | K::LBracket
-            | K::RBracket
-            | K::LBrace
-            | K::RBrace
-            | K::Operator
+        l,
+        Lex::Coalesce
+            | Lex::CoalesceEq
+            | Lex::StarStar
+            | Lex::StarStarEq
+            | Lex::Backslash
+            | Lex::BackslashEq
+            | Lex::Shl
+            | Lex::Shr
+            | Lex::UShr
+            | Lex::ShlEq
+            | Lex::ShrEq
+            | Lex::UShrEq
+            | Lex::TripleShl
+            | Lex::TripleShlEq
+            | Lex::BitAnd
+            | Lex::BitOr
+            | Lex::BitXor
+            | Lex::BitAndEq
+            | Lex::BitOrEq
+            | Lex::BitXorEq
+            | Lex::Question
+            | Lex::Semi
+            | Lex::Comma
+            | Lex::Colon
+            | Lex::Dot
+            | Lex::DotDot
+            | Lex::Arrow
+            | Lex::Eq
+            | Lex::Plus
+            | Lex::Minus
+            | Lex::Star
+            | Lex::Slash
+            | Lex::Percent
+            | Lex::PlusEq
+            | Lex::MinusEq
+            | Lex::StarEq
+            | Lex::SlashEq
+            | Lex::PercentEq
+            | Lex::EqEq
+            | Lex::NotEq
+            | Lex::EqEqEq
+            | Lex::NotEqEq
+            | Lex::Lt
+            | Lex::Lte
+            | Lex::Gt
+            | Lex::Gte
+            | Lex::AndAnd
+            | Lex::OrOr
+            | Lex::Bang
+            | Lex::Tilde
+            | Lex::PlusPlus
+            | Lex::MinusMinus
+            | Lex::LParen
+            | Lex::RParen
+            | Lex::LBracket
+            | Lex::RBracket
+            | Lex::LBrace
+            | Lex::RBrace
+            | Lex::Operator
     )
 }
 
 fn leek_token_semantics(root: &SyntaxNode, token: &SyntaxToken) -> Option<(u32, u32)> {
-    let k = token.kind_as::<K>()?;
+    let k = K::from_syntax_kind(token.kind())?;
     let text = token.text();
     let bytes = text.as_bytes();
     let site = TokenScopeSite::new(root, token);
     let in_type_ctx = site.as_ref().is_some_and(TokenScopeSite::in_type_syntax);
     let in_tpl = site.as_ref().is_some_and(TokenScopeSite::in_template_params);
     let ty = match k {
-        K::Ws | K::Trivia => return None,
-        K::LineComment | K::BlockComment => TY_COMMENT,
-        K::String => 1,
-        K::Number | K::Pi | K::Infinity | K::TrueKw | K::FalseKw | K::NullKw => 2,
-        K::Ident => {
+        K::Lex(Lex::Ws) | K::Node(Node::Trivia) => return None,
+        K::Lex(Lex::LineComment | Lex::BlockComment) => TY_COMMENT,
+        K::Lex(Lex::String) => 1,
+        K::Lex(
+            Lex::Number | Lex::Pi | Lex::Infinity | Lex::TrueKw | Lex::FalseKw | Lex::NullKw,
+        ) => 2,
+        K::Lex(Lex::Ident) => {
             if in_type_ctx {
                 match site
                     .as_ref()
@@ -470,17 +472,21 @@ fn leek_token_semantics(root: &SyntaxNode, token: &SyntaxToken) -> Option<(u32, 
                 TY_VARIABLE
             }
         }
-        k if is_type_keyword(k) => TY_TYPE,
-        k if is_control_keyword(k) => 0,
-        k if is_operator_syntax_token(k) => operator_family_token_type(k, in_type_ctx, in_tpl),
+        K::Lex(lx) if is_type_keyword(lx) => TY_TYPE,
+        K::Lex(lx) if is_control_keyword(lx) => 0,
+        K::Lex(lx) if is_operator_syntax_token(lx) => {
+            operator_family_token_type(lx, in_type_ctx, in_tpl)
+        }
         _ => return None,
     };
     let mut mods = match k {
-        K::LineComment | K::BlockComment => documentation_modifier_bitset(bytes),
+        K::Lex(Lex::LineComment | Lex::BlockComment) => documentation_modifier_bitset(bytes),
         _ => 0,
     };
-    if is_type_keyword(k) {
-        mods |= MOD_DEFAULT_LIBRARY;
+    if let K::Lex(lx) = k {
+        if is_type_keyword(lx) {
+            mods |= MOD_DEFAULT_LIBRARY;
+        }
     }
     Some((ty, mods))
 }

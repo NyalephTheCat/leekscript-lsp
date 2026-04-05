@@ -3,7 +3,7 @@
 //! Each [`TokenScopeSite`] performs at most one covering-node lookup and one ancestor walk per token.
 
 use leekscript::ast::{ClassDecl, FunctionDecl};
-use leekscript::syntax::kinds::K;
+use leekscript::syntax::kinds::{Lex, Node};
 use leekscript::visit::AstNodeTrait;
 use sipha::tree::red::{SyntaxNode, SyntaxToken};
 use sipha::types::{FromSyntaxKind, IntoSyntaxKind, SyntaxKind};
@@ -20,17 +20,17 @@ pub(crate) enum IdentTypePosition {
 /// CST node kinds that wrap type syntax (custom names, unions, generics, template params, and
 /// `instanceof Array<…>`-style built-in type expressions).
 fn type_syntax_container_kind(k: SyntaxKind) -> bool {
-    K::from_syntax_kind(k).is_some_and(|node_k| {
-        matches!(
-            node_k,
-            K::TypeExpr
-                | K::TypeUnionType
-                | K::TypeNullableType
-                | K::TypePrimaryType
-                | K::TemplateParams
-                | K::BuiltinTypeNameExpr
+    matches!(
+        Node::from_syntax_kind(k),
+        Some(
+            Node::TypeExpr
+                | Node::TypeUnionType
+                | Node::TypeNullableType
+                | Node::TypePrimaryType
+                | Node::TemplateParams
+                | Node::BuiltinTypeNameExpr
         )
-    })
+    )
 }
 
 /// `true` when `decl` is a function or class that declares `name` in its `<…>` template list.
@@ -72,7 +72,7 @@ impl<'a> TokenScopeSite<'a> {
     }
 
     /// `true` when this token lies under a type-syntax subtree (not necessarily only under
-    /// [`K::TemplateParams`]).
+    /// [`Node::TemplateParams`]).
     #[must_use]
     pub fn in_type_syntax(&self) -> bool {
         if type_syntax_container_kind(self.covering.kind()) {
@@ -86,18 +86,18 @@ impl<'a> TokenScopeSite<'a> {
     /// `true` when the token is inside a declaration template list (`function f<T>(…)`, `class C<T>`).
     #[must_use]
     pub fn in_template_params(&self) -> bool {
-        let tpl = K::TemplateParams.into_syntax_kind();
+        let tpl = Node::TemplateParams.into_syntax_kind();
         if self.covering.kind() == tpl {
             return true;
         }
         self.ancestors.iter().any(|a| a.kind() == tpl)
     }
 
-    /// For an [`K::Ident`] token: `true` when the name is declared as a template parameter on an
+    /// For a [`Lex::Ident`] token: `true` when the name is declared as a template parameter on an
     /// enclosing function or class.
     #[must_use]
     pub fn ident_is_declared_template_param(&self) -> bool {
-        if self.token.kind_as::<K>() != Some(K::Ident) {
+        if self.token.kind_as::<Lex>() != Some(Lex::Ident) {
             return false;
         }
         let name = self.token.text();
@@ -112,7 +112,7 @@ impl<'a> TokenScopeSite<'a> {
     /// If this is an identifier in a type position, classify it for LSP semantic token types.
     #[must_use]
     pub fn classify_ident_in_type_position(&self) -> Option<IdentTypePosition> {
-        if self.token.kind_as::<K>() != Some(K::Ident) {
+        if self.token.kind_as::<Lex>() != Some(Lex::Ident) {
             return None;
         }
         if !self.in_type_syntax() {
