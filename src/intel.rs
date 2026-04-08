@@ -17,6 +17,7 @@ use sipha::diagnostics::line_index::LineIndex;
 use sipha::types::Span;
 
 use crate::diagnostics::span_to_range_in_source;
+use crate::hover_markdown::symbol_markdown;
 use crate::diagnostics::{
     analyze_parsed, clamp_span_to_source, merged_location_to_lsp, merged_span_to_file_span,
     parse_merged_check_unit, prepare_open_file_merged_unit,
@@ -106,17 +107,6 @@ fn narrowest_expr_ty_at(analysis: &AnalysisResult, off: u32) -> Option<&LeekTy> 
         .filter(|(k, _)| k.start <= off && off < k.end)
         .min_by_key(|(k, _)| k.end - k.start)
         .map(|(_, t)| t)
-}
-
-fn symbol_markdown(sym: &Symbol) -> String {
-    let mut s = format!("```leekscript\n{}\n```", sym.effective_ty());
-    if let Some(doc) = sym.doc_raw() {
-        if !doc.is_empty() {
-            s.push_str("\n\n---\n\n");
-            s.push_str(doc);
-        }
-    }
-    s
 }
 
 pub(crate) fn hover(

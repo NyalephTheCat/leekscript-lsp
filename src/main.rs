@@ -6,6 +6,7 @@ mod backend;
 mod diagnostics;
 mod folding;
 mod formatting;
+mod hover_markdown;
 mod intel;
 mod token_context;
 mod semantic_tokens;
