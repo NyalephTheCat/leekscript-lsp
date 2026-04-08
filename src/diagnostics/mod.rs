@@ -6,9 +6,14 @@
 //! before merging.
 
 mod convert;
+mod project_context;
 mod workspace;
 
 pub(crate) use convert::{full_document_range, span_to_range_in_source};
+pub(crate) use project_context::{
+    analyze_parsed, clamp_span_to_source, merged_location_to_lsp, merged_span_to_file_span,
+    parse_merged_check_unit, prepare_open_file_merged_unit,
+};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -25,20 +30,6 @@ pub struct DiagnosticPublish {
     pub uri: Url,
     pub diagnostics: Vec<Diagnostic>,
     pub version: Option<i32>,
-}
-
-/// Parse `initializationOptions.signatureFiles` from the VS Code / editor client (JSON array of paths).
-#[must_use]
-pub fn signature_files_from_init(value: Option<&serde_json::Value>) -> Vec<PathBuf> {
-    let Some(v) = value else {
-        return Vec::new();
-    };
-    let Some(arr) = v.get("signatureFiles").and_then(|x| x.as_array()) else {
-        return Vec::new();
-    };
-    arr.iter()
-        .filter_map(|x| x.as_str().map(PathBuf::from))
-        .collect()
 }
 
 /// Re-run merged diagnostics for other open `file://` documents that share the same inferred

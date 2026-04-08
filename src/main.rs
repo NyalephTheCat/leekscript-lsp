@@ -6,26 +6,20 @@ mod backend;
 mod diagnostics;
 mod folding;
 mod formatting;
+mod intel;
 mod token_context;
 mod semantic_tokens;
 mod server;
 
-use std::collections::HashMap;
-
-use parking_lot::RwLock;
 use tower_lsp::{LspService, Server};
 
-use crate::backend::{Backend, InitOptions};
+use crate::backend::Backend;
 
 #[tokio::main]
 async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(|client| Backend {
-        client,
-        documents: RwLock::new(HashMap::new()),
-        init: RwLock::new(InitOptions::default()),
-    });
+    let (service, socket) = LspService::new(Backend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
 }

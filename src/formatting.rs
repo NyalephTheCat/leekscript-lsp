@@ -92,9 +92,8 @@ pub(crate) fn range_formatting_edits(
     let doc = LeekDoc::from_parsed(&pw.doc);
     let fmt_opts = leek_format_options_from_lsp(lsp_opts);
     let range_result = format_leek_doc_range(&doc, sel, &fmt_opts);
-    let parts = match range_result {
-        Some(p) => p,
-        None => return Some(vec![]),
+    let Some(parts) = range_result else {
+        return Some(vec![]);
     };
     if parts.is_empty() {
         return Some(vec![]);

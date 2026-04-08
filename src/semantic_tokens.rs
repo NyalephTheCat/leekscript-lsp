@@ -5,14 +5,23 @@ use leekscript::parse::{
 };
 use leekscript::syntax::kinds::{K, Lex, Node};
 use lsp_types::{
-    SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens, SemanticTokensLegend, Url,
+    Range, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens, SemanticTokensLegend, Url,
 };
+use sipha::diagnostics::line_index::LineIndex;
 use sipha::diagnostics::parsed_doc::ParsedDoc;
 use sipha::diagnostics::utf16::{span_to_utf16_range, utf16_len};
 use sipha::tree::red::{SyntaxNode, SyntaxToken};
 use sipha::types::{FromSyntaxKind, Pos, Span};
 
 use crate::token_context::{IdentTypePosition, TokenScopeSite};
+
+fn lsp_range_to_byte_span(source: &str, range: &Range) -> Option<Span> {
+    let idx = LineIndex::new(source.as_bytes());
+    let start = idx.line_col_utf16_to_byte(source, range.start.line, range.start.character)?;
+    let end = idx.line_col_utf16_to_byte_clamped(source, range.end.line, range.end.character)?;
+    let (lo, hi) = if start <= end { (start, end) } else { (end, start) };
+    Some(Span::new(lo, hi))
+}
 
 /// [`SemanticTokenType::COMMENT`] index in [`semantic_token_legend`].
 const TY_COMMENT: u32 = 3;
@@ -506,9 +515,22 @@ pub fn signature_mode_for_uri(uri_str: &str) -> bool {
     path.contains(".sig.") || path.ends_with(".sig.leek")
 }
 
-fn semantic_tokens_from_parsed_doc(doc: &ParsedDoc) -> SemanticTokens {
+fn span_overlaps_byte_range(span: Span, filter: Span) -> bool {
+    span.start < filter.end && span.end > filter.start
+}
+
+fn semantic_tokens_from_parsed_doc_filtered(doc: &ParsedDoc, filter: Option<Span>) -> SemanticTokens {
     let mut data: Vec<SemanticToken> = Vec::new();
-    let mut state = EncodeState::default();
+    let mut state = if let Some(f) = filter {
+        let (rl, rc) = doc.offset_to_line_col_utf16(f.start);
+        EncodeState {
+            prev_line: rl,
+            prev_start: rc,
+            first: false,
+        }
+    } else {
+        EncodeState::default()
+    };
 
     let root = doc.root();
     for t in root.descendant_tokens() {
@@ -516,9 +538,18 @@ fn semantic_tokens_from_parsed_doc(doc: &ParsedDoc) -> SemanticTokens {
             continue;
         };
         let span = t.text_range();
+        if let Some(f) = filter {
+            if !span_overlaps_byte_range(span, f) {
+                continue;
+            }
+        }
 
         if ty == TY_COMMENT {
-            emit_comment_coverage(&mut data, doc, &mut state, span, mods);
+            if let Some(f) = filter {
+                emit_comment_coverage_filtered(&mut data, doc, &mut state, span, mods, f);
+            } else {
+                emit_comment_coverage(&mut data, doc, &mut state, span, mods);
+            }
             continue;
         }
 
@@ -530,6 +561,56 @@ fn semantic_tokens_from_parsed_doc(doc: &ParsedDoc) -> SemanticTokens {
         result_id: None,
         data,
     }
+}
+
+fn emit_comment_coverage_filtered(
+    data: &mut Vec<SemanticToken>,
+    doc: &ParsedDoc,
+    state: &mut EncodeState,
+    span: Span,
+    mods: u32,
+    filter: Span,
+) {
+    let bytes = doc.span_slice(span);
+    let multiline = bytes.contains(&b'\n');
+
+    if multiline {
+        for (ls, le) in span_visual_line_ranges(doc, span) {
+            if !span_overlaps_byte_range(Span::new(ls, le), filter) {
+                continue;
+            }
+            let line_slice = doc.span_slice(Span::new(ls, le));
+            let Ok(line_str) = std::str::from_utf8(line_slice) else {
+                continue;
+            };
+            if mods & MOD_DOCUMENTATION != 0 {
+                emit_documentation_line(data, doc, state, ls, line_str);
+            } else {
+                push_span_comment(data, doc, state, ls, le, TY_COMMENT, mods);
+            }
+        }
+        return;
+    }
+
+    if !span_overlaps_byte_range(span, filter) {
+        return;
+    }
+
+    let line_slice = doc.span_slice(span);
+    let Ok(line_str) = std::str::from_utf8(line_slice) else {
+        let len = span_utf16_len_first_line(doc, span);
+        push_semantic_token(data, doc, state, span.start, len, TY_COMMENT, mods);
+        return;
+    };
+    if mods & MOD_DOCUMENTATION != 0 {
+        emit_documentation_line(data, doc, state, span.start, line_str);
+    } else {
+        push_span_comment(data, doc, state, span.start, span.end, TY_COMMENT, mods);
+    }
+}
+
+fn semantic_tokens_from_parsed_doc(doc: &ParsedDoc) -> SemanticTokens {
+    semantic_tokens_from_parsed_doc_filtered(doc, None)
 }
 
 /// Full-document semantic tokens for `source` (UTF-8). Uses signature parse mode when `document_uri`
@@ -553,4 +634,22 @@ pub fn semantic_tokens_for_document(source: &str, document_uri: Option<&str>) ->
 #[allow(dead_code)] // Public crate API; the `leekscript-lsp` binary only calls `semantic_tokens_for_document`.
 pub fn semantic_tokens_for_source(source: &str) -> SemanticTokens {
     semantic_tokens_for_document(source, None)
+}
+
+/// Semantic tokens intersecting `range` (LSP UTF-16), encoded relative to `range.start` per LSP.
+#[must_use]
+pub fn semantic_tokens_for_document_in_range(source: &str, document_uri: Option<&str>, range: Range) -> SemanticTokens {
+    let opts = LanguageOptions::v4_experimental_all();
+    let parsed = if document_uri.is_some_and(signature_mode_for_uri) {
+        parse_signature_doc_with_recovery(source, opts)
+    } else {
+        parse_doc_with_recovery(source, opts)
+    };
+    let Ok(parsed) = parsed else {
+        return SemanticTokens::default();
+    };
+    let Some(span) = lsp_range_to_byte_span(source, &range) else {
+        return SemanticTokens::default();
+    };
+    semantic_tokens_from_parsed_doc_filtered(&parsed.doc, Some(span))
 }
