@@ -6,12 +6,12 @@ use std::path::Path;
 
 use leekscript::{AnalysisResult, LeekTy, MergedCheckUnit, Reference, Symbol, SymbolKind};
 use lsp_types::{
-    CodeActionOrCommand, Command, CompletionItem, CompletionItemKind, CompletionParams,
-    CompletionResponse, DocumentSymbol, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverContents, HoverParams, InlayHint, InlayHintLabel,
-    InlayHintTooltip, Location, MarkupContent, MarkupKind, Position, Range,
-    ReferenceParams, RenameParams, SemanticTokensRangeParams, SymbolKind as LspSymbolKind,
-    TextEdit, Url, WorkspaceEdit,
+    CodeAction, CodeActionKind, CodeActionOrCommand, Command, CompletionItem, CompletionItemKind,
+    CompletionParams, CompletionResponse, Diagnostic, DocumentSymbol, DocumentSymbolResponse,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams, InlayHint,
+    InlayHintLabel, InlayHintKind, InlayHintTooltip, Location, MarkupContent, MarkupKind,
+    NumberOrString, Position, Range, ReferenceParams, RenameParams, SemanticTokensRangeParams,
+    SymbolKind as LspSymbolKind, TextEdit, Url, WorkspaceEdit,
 };
 use sipha::diagnostics::line_index::LineIndex;
 use sipha::types::Span;
@@ -20,7 +20,7 @@ use crate::diagnostics::span_to_range_in_source;
 use crate::hover_markdown::symbol_markdown;
 use crate::diagnostics::{
     analyze_parsed, clamp_span_to_source, merged_location_to_lsp, merged_span_to_file_span,
-    parse_merged_check_unit, prepare_open_file_merged_unit,
+    parse_merged_check_unit, prepare_open_file_merged_unit, full_document_range,
 };
 use crate::semantic_tokens::semantic_tokens_for_document_in_range;
 
@@ -31,6 +31,40 @@ const KEYWORDS: &[&str] = &[
     "return", "static", "string", "super", "switch", "this", "throw", "true", "try", "var", "void",
     "while",
 ];
+
+fn is_ident_continue(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+fn identifier_prefix_at(source: &str, pos: Position) -> String {
+    let idx = LineIndex::new(source.as_bytes());
+    let Some(b) = idx.line_col_utf16_to_byte(source, pos.line, pos.character) else {
+        return String::new();
+    };
+    let mut i = b as usize;
+    if i > source.len() {
+        i = source.len();
+    }
+    let bytes = source.as_bytes();
+    while i > 0 && is_ident_continue(bytes[i - 1]) {
+        i -= 1;
+    }
+    source[i..(b as usize).min(source.len())].to_string()
+}
+
+fn completion_rank(k: SymbolKind) -> u8 {
+    // Lower is better. Prefer "local-ish" names over structural names.
+    match k {
+        SymbolKind::Parameter => 0,
+        SymbolKind::Variable => 1,
+        SymbolKind::Field => 2,
+        SymbolKind::Method | SymbolKind::Constructor => 3,
+        SymbolKind::Function => 4,
+        SymbolKind::Class => 5,
+        SymbolKind::Global => 6,
+        SymbolKind::TypeParam => 7,
+    }
+}
 
 pub(crate) struct ProjectIntel {
     pub prep: MergedCheckUnit,
@@ -107,6 +141,83 @@ fn narrowest_expr_ty_at(analysis: &AnalysisResult, off: u32) -> Option<&LeekTy> 
         .filter(|(k, _)| k.start <= off && off < k.end)
         .min_by_key(|(k, _)| k.end - k.start)
         .map(|(_, t)| t)
+}
+
+fn position_leq(a: Position, b: Position) -> bool {
+    a.line < b.line || (a.line == b.line && a.character <= b.character)
+}
+
+fn position_in_range(pos: Position, r: &Range) -> bool {
+    position_leq(r.start, pos) && position_leq(pos, r.end)
+}
+
+fn lsp_diag_is_undefined_name(d: &Diagnostic) -> bool {
+    let Some(code) = d.code.as_ref() else {
+        return false;
+    };
+    match code {
+        NumberOrString::String(s) => s == "undefined-name",
+        NumberOrString::Number(n) => *n == 1, // not used by us, but keep a fallback
+    }
+}
+
+fn skip_ws_fwd(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+        i += 1;
+    }
+    i
+}
+
+fn skip_ws_back(bytes: &[u8], mut i: usize) -> usize {
+    while i > 0 && bytes[i - 1].is_ascii_whitespace() {
+        i -= 1;
+    }
+    i
+}
+
+fn is_word_boundary(bytes: &[u8], i: usize) -> bool {
+    if i >= bytes.len() {
+        return true;
+    }
+    !bytes[i].is_ascii_alphanumeric() && bytes[i] != b'_'
+}
+
+fn looks_like_new_class(source: &str, cursor_byte: usize) -> bool {
+    let bytes = source.as_bytes();
+    let i = skip_ws_back(bytes, cursor_byte);
+    // Look for "... new <Ident>"
+    let new_kw = b"new";
+    if i < new_kw.len() + 1 {
+        return false;
+    }
+    // Find start of previous token
+    let mut j = i;
+    while j > 0 && is_ident_continue(bytes[j - 1]) {
+        j -= 1;
+    }
+    // If we are currently on an identifier, `j` is its start; move left of it.
+    let left = skip_ws_back(bytes, j);
+    if left < new_kw.len() {
+        return false;
+    }
+    let start = left - new_kw.len();
+    if &bytes[start..left] != new_kw {
+        return false;
+    }
+    // Ensure token boundary.
+    (start == 0 || is_word_boundary(bytes, start - 1)) && is_word_boundary(bytes, left)
+}
+
+fn looks_like_call(source: &str, cursor_byte: usize) -> bool {
+    let bytes = source.as_bytes();
+    let i = skip_ws_fwd(bytes, cursor_byte);
+    i < bytes.len() && bytes[i] == b'('
+}
+
+fn looks_like_member_access(source: &str, cursor_byte: usize) -> bool {
+    let bytes = source.as_bytes();
+    let i = skip_ws_fwd(bytes, cursor_byte);
+    i < bytes.len() && bytes[i] == b'.'
 }
 
 pub(crate) fn hover(
@@ -231,11 +342,23 @@ pub(crate) fn completion(
     let Some(off) = merged_offset_for_cursor(intel, entry_path, source, pos) else {
         return CompletionResponse::Array(Vec::new());
     };
+    let prefix = identifier_prefix_at(source, pos);
+    let prefix_lc = prefix.to_ascii_lowercase();
 
     let mut seen = HashSet::<String>::new();
     let mut items: Vec<CompletionItem> = Vec::new();
 
+    let want = |label: &str| {
+        if prefix_lc.is_empty() {
+            return true;
+        }
+        label.to_ascii_lowercase().starts_with(&prefix_lc)
+    };
+
     for kw in KEYWORDS {
+        if !want(kw) {
+            continue;
+        }
         if seen.insert((*kw).to_string()) {
             items.push(CompletionItem {
                 label: (*kw).to_string(),
@@ -245,28 +368,78 @@ pub(crate) fn completion(
         }
     }
 
+    let mut sym_items: Vec<(u8, String, CompletionItem)> = Vec::new();
     for sym in &intel.analysis.symbols {
         if sym.name_span.end > off {
             continue;
         }
-        if seen.insert(sym.name.clone()) {
-            let kind = match sym.kind {
-                SymbolKind::Function => Some(CompletionItemKind::FUNCTION),
-                SymbolKind::Class => Some(CompletionItemKind::CLASS),
-                SymbolKind::Method | SymbolKind::Constructor => Some(CompletionItemKind::METHOD),
-                SymbolKind::Field => Some(CompletionItemKind::FIELD),
-                SymbolKind::Variable | SymbolKind::Parameter | SymbolKind::Global => {
-                    Some(CompletionItemKind::VARIABLE)
-                }
-                SymbolKind::TypeParam => Some(CompletionItemKind::TYPE_PARAMETER),
-            };
-            items.push(CompletionItem {
-                label: sym.name.clone(),
+        if !want(&sym.name) {
+            continue;
+        }
+        if !seen.insert(sym.name.clone()) {
+            continue;
+        }
+        let kind = match sym.kind {
+            SymbolKind::Function => Some(CompletionItemKind::FUNCTION),
+            SymbolKind::Class => Some(CompletionItemKind::CLASS),
+            SymbolKind::Method | SymbolKind::Constructor => Some(CompletionItemKind::METHOD),
+            SymbolKind::Field => Some(CompletionItemKind::FIELD),
+            SymbolKind::Variable | SymbolKind::Parameter | SymbolKind::Global => {
+                Some(CompletionItemKind::VARIABLE)
+            }
+            SymbolKind::TypeParam => Some(CompletionItemKind::TYPE_PARAMETER),
+        };
+        let label = sym.name.clone();
+        let rank = completion_rank(sym.kind.clone());
+        let sort = format!("{rank:02}-{label}");
+        sym_items.push((
+            rank,
+            label.clone(),
+            CompletionItem {
+                label,
                 kind,
                 detail: Some(sym.effective_ty().to_string()),
+                sort_text: Some(sort),
                 ..Default::default()
-            });
-        }
+            },
+        ));
+    }
+
+    sym_items.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    for (_, _, it) in sym_items {
+        items.push(it);
+    }
+
+    // A few high-value snippets (shown only when they match prefix).
+    // Kept intentionally minimal to avoid clutter.
+    let push_snippet = |items: &mut Vec<CompletionItem>, label: &str, snippet: &str, kind| {
+        items.push(CompletionItem {
+            label: label.to_string(),
+            kind: Some(kind),
+            insert_text: Some(snippet.to_string()),
+            insert_text_format: Some(lsp_types::InsertTextFormat::SNIPPET),
+            ..Default::default()
+        });
+    };
+
+    if want("if") {
+        push_snippet(&mut items, "if", "if (${1:cond}) {\n\t$0\n}", CompletionItemKind::SNIPPET);
+    }
+    if want("for") {
+        push_snippet(
+            &mut items,
+            "for",
+            "for (let ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t$0\n}",
+            CompletionItemKind::SNIPPET,
+        );
+    }
+    if want("function") {
+        push_snippet(
+            &mut items,
+            "function",
+            "function ${1:name}(${2:params}) {\n\t$0\n}",
+            CompletionItemKind::SNIPPET,
+        );
     }
 
     CompletionResponse::Array(items)
@@ -322,7 +495,13 @@ pub(crate) fn document_symbols(
     DocumentSymbolResponse::Nested(syms)
 }
 
-pub(crate) fn inlay_hints(intel: &ProjectIntel, entry_path: &Path, entry_source: &str) -> Vec<InlayHint> {
+pub(crate) fn inlay_hints(
+    intel: &ProjectIntel,
+    entry_path: &Path,
+    entry_source: &str,
+    only_range: Option<Range>,
+    hide_any: bool,
+) -> Vec<InlayHint> {
     let mut out = Vec::new();
     for sym in &intel.analysis.symbols {
         if sym.kind != SymbolKind::Variable && sym.kind != SymbolKind::Parameter {
@@ -331,19 +510,27 @@ pub(crate) fn inlay_hints(intel: &ProjectIntel, entry_path: &Path, entry_source:
         let Some(inf) = &sym.inferred_ty else {
             continue;
         };
+        if hide_any && inf.to_string() == "any" {
+            continue;
+        }
         if sym.declared_ty.is_some() {
             continue;
         }
         let Some(range) = range_in_entry_source(intel, entry_path, entry_source, sym.name_span) else {
             continue;
         };
+        if let Some(r) = only_range.as_ref() {
+            if !position_in_range(range.end, r) {
+                continue;
+            }
+        }
         out.push(InlayHint {
             position: range.end,
             label: InlayHintLabel::String(format!(": {inf}")),
-            kind: None,
+            kind: Some(InlayHintKind::TYPE),
             text_edits: None,
             tooltip: Some(InlayHintTooltip::String(inf.to_string())),
-            padding_left: None,
+            padding_left: Some(true),
             padding_right: None,
             data: None,
         });
@@ -411,8 +598,157 @@ pub(crate) fn semantic_tokens_range(
     semantic_tokens_for_document_in_range(source, Some(uri_str), range)
 }
 
-pub(crate) fn code_actions() -> Vec<CodeActionOrCommand> {
-    Vec::new()
+pub(crate) fn code_actions(
+    intel: &ProjectIntel,
+    entry_path: &Path,
+    entry_source: &str,
+    entry_uri: &Url,
+    pos: Position,
+    lsp_context_diagnostics: &[Diagnostic],
+) -> Vec<CodeActionOrCommand> {
+    let Some(off) = merged_offset_for_cursor(intel, entry_path, entry_source, pos) else {
+        return Vec::new();
+    };
+    let mut out: Vec<CodeActionOrCommand> = Vec::new();
+
+    // Quick fix: create a stub for an unresolved reference at the cursor.
+    if let Some(r) = narrowest_ref_at(&intel.analysis, off) {
+        if r.resolved.is_none() && !r.name.is_empty() {
+            let has_undefined_name_diag_here = lsp_context_diagnostics
+                .iter()
+                .filter(|d| lsp_diag_is_undefined_name(d))
+                .any(|d| position_in_range(pos, &d.range));
+            if !has_undefined_name_diag_here {
+                // Avoid noisy actions while typing: only show when the client reports an actual
+                // undefined-name diagnostic for this position.
+                return out;
+            }
+            let already_defined = intel.analysis.symbols.iter().any(|s| s.name == r.name);
+            if !already_defined {
+                let cursor_byte = file_byte_at_position(entry_source, pos).unwrap_or(0) as usize;
+                let prefer_fn = looks_like_call(entry_source, cursor_byte);
+                let prefer_class = looks_like_new_class(entry_source, cursor_byte)
+                    || looks_like_member_access(entry_source, cursor_byte)
+                    || r.name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+
+                let end = full_document_range(entry_source).end;
+                let insert_at = Range { start: end, end };
+
+                let mut changes_fn: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+                changes_fn.insert(
+                    entry_uri.clone(),
+                    vec![TextEdit {
+                        range: insert_at,
+                        new_text: format!("\n\nfunction {}() {{\n\t\n}}\n", r.name),
+                    }],
+                );
+                out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                    title: format!("Create function `{}`", r.name),
+                    kind: Some(CodeActionKind::QUICKFIX),
+                    diagnostics: None,
+                    is_preferred: Some(prefer_fn && !prefer_class),
+                    disabled: None,
+                    edit: Some(WorkspaceEdit {
+                        changes: Some(changes_fn),
+                        document_changes: None,
+                        change_annotations: None,
+                    }),
+                    command: None,
+                    data: None,
+                }));
+
+                let mut changes_var: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+                changes_var.insert(
+                    entry_uri.clone(),
+                    vec![TextEdit {
+                        range: insert_at,
+                        new_text: format!("\n\nvar {};\n", r.name),
+                    }],
+                );
+                out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                    title: format!("Declare variable `{}`", r.name),
+                    kind: Some(CodeActionKind::QUICKFIX),
+                    diagnostics: None,
+                    is_preferred: Some(!prefer_fn && !prefer_class),
+                    disabled: None,
+                    edit: Some(WorkspaceEdit {
+                        changes: Some(changes_var),
+                        document_changes: None,
+                        change_annotations: None,
+                    }),
+                    command: None,
+                    data: None,
+                }));
+
+                let mut changes_class: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+                changes_class.insert(
+                    entry_uri.clone(),
+                    vec![TextEdit {
+                        range: insert_at,
+                        new_text: format!("\n\nclass {} {{\n\tconstructor() {{\n\t\t\n\t}}\n}}\n", r.name),
+                    }],
+                );
+                out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                    title: format!("Create class `{}`", r.name),
+                    kind: Some(CodeActionKind::QUICKFIX),
+                    diagnostics: None,
+                    is_preferred: Some(prefer_class),
+                    disabled: None,
+                    edit: Some(WorkspaceEdit {
+                        changes: Some(changes_class),
+                        document_changes: None,
+                        change_annotations: None,
+                    }),
+                    command: None,
+                    data: None,
+                }));
+            }
+        }
+    }
+
+    // Quick fix: insert inferred type annotation for variables/parameters.
+    if let Some(sym) = narrowest_symbol_name_at(&intel.analysis, off) {
+        if (sym.kind == SymbolKind::Variable || sym.kind == SymbolKind::Parameter)
+            && sym.declared_ty.is_none()
+        {
+            if let Some(inf) = &sym.inferred_ty {
+                if let Some(name_range) =
+                    range_in_entry_source(intel, entry_path, entry_source, sym.name_span)
+                {
+                    let insert_at = Range {
+                        start: name_range.end,
+                        end: name_range.end,
+                    };
+
+                    let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+                    changes.insert(
+                        entry_uri.clone(),
+                        vec![TextEdit {
+                            range: insert_at,
+                            new_text: format!(": {inf}"),
+                        }],
+                    );
+
+                    out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                        title: "Insert inferred type annotation".to_string(),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        diagnostics: None,
+                        is_preferred: Some(true),
+                        disabled: None,
+                        edit: Some(WorkspaceEdit {
+                            changes: Some(changes),
+                            document_changes: None,
+                            change_annotations: None,
+                        }),
+                        command: None,
+                        data: None,
+                    }));
+                }
+            }
+        }
+    }
+
+    out
 }
 
 pub(crate) fn rename(

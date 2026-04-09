@@ -23,7 +23,7 @@ lsp-types = "0.94"
 parking_lot = "0.12"
 serde_json = "1"
 sipha = { path = "../../sipha/sipha", default-features = false, features = ["std", "utf16"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "time"] }
 tower-lsp = "0.20"
 
 [dev-dependencies]
