@@ -166,7 +166,8 @@ impl Backend {
                 };
                 (version, source)
             };
-            this.publish_document_diagnostics(uri, version, &source).await;
+            this.publish_document_diagnostics(uri, version, &source)
+                .await;
         });
         self.diagnostics_tasks.write().insert(uri_s, h);
     }
@@ -210,7 +211,10 @@ impl Backend {
         let source_fp = fingerprint_source(source);
         let (sig_fp, sigs) = {
             let i = self.init.read();
-            (fingerprint_signature_files(&i.signature_files), i.signature_files.clone())
+            (
+                fingerprint_signature_files(&i.signature_files),
+                i.signature_files.clone(),
+            )
         };
 
         {
@@ -276,7 +280,12 @@ impl BackendTaskClone {
             let cascade = project_root
                 .as_ref()
                 .map(|root| {
-                    diagnostics::cascade_publishes_same_project(&open, uri_string.as_str(), root, &sigs)
+                    diagnostics::cascade_publishes_same_project(
+                        &open,
+                        uri_string.as_str(),
+                        root,
+                        &sigs,
+                    )
                 })
                 .unwrap_or_default();
             (publishes, cascade)

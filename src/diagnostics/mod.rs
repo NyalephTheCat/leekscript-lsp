@@ -95,19 +95,24 @@ pub fn compute_diagnostic_publishes(
         if use_sig {
             let merged_default = MergedSourceMapping::default();
             let lang = LanguageOptions::v4_experimental_all();
-            let combined = match prepend_signatures_to_merged(lang, signature_files, source, merged_default) {
-                Ok((c, _)) => c,
-                Err(e) => {
-                    return vec![DiagnosticPublish {
-                        uri: entry_uri,
-                        diagnostics: vec![simple_error_at_start(e.to_string())],
-                        version: Some(document_version),
-                    }];
-                }
-            };
+            let combined =
+                match prepend_signatures_to_merged(lang, signature_files, source, merged_default) {
+                    Ok((c, _)) => c,
+                    Err(e) => {
+                        return vec![DiagnosticPublish {
+                            uri: entry_uri,
+                            diagnostics: vec![simple_error_at_start(e.to_string())],
+                            version: Some(document_version),
+                        }];
+                    }
+                };
             return vec![DiagnosticPublish {
                 uri: entry_uri,
-                diagnostics: compute_diagnostics_single_buffer(&combined, Some(document_uri_str), true),
+                diagnostics: compute_diagnostics_single_buffer(
+                    &combined,
+                    Some(document_uri_str),
+                    true,
+                ),
                 version: Some(document_version),
             }];
         }

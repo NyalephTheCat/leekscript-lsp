@@ -2,13 +2,13 @@
 
 use leekscript::grammar;
 use leekscript::parse::{
-    language_options_with_source_directives, parse_doc_with_recovery, parse_signature_doc_with_recovery,
-    LanguageOptions, ParseError, ParseErrorInner,
+    language_options_with_source_directives, parse_doc_with_recovery,
+    parse_signature_doc_with_recovery, LanguageOptions, ParseError, ParseErrorInner,
 };
 use leekscript::{run_semantic_analysis, SemanticCode, SemanticSeverity};
 use lsp_types::{
-    Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString, Position,
-    Range, Url,
+    Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString,
+    Position, Range, Url,
 };
 use sipha::diagnostics::error::Diagnostic as SiphaDiagnostic;
 use sipha::diagnostics::line_index::LineIndex;
@@ -74,6 +74,7 @@ pub(crate) fn semantic_code_str(code: SemanticCode) -> &'static str {
         SemanticCode::DeprecatedStrictEquality => "deprecated-strict-equality",
         SemanticCode::DeprecatedCallable => "deprecated-callable",
         SemanticCode::NullableChainAccess => "nullable-chain-access",
+        SemanticCode::BareReturnRequiresSemicolon => "bare-return-requires-semicolon",
     }
 }
 
@@ -107,7 +108,11 @@ fn diagnostic_parse(doc: &ParsedDoc, source: &str, d: &SiphaDiagnostic) -> Diagn
     }
 }
 
-pub(crate) fn leek_parse_error_to_lsp(doc: Option<&ParsedDoc>, source: &str, err: &ParseError) -> Diagnostic {
+pub(crate) fn leek_parse_error_to_lsp(
+    doc: Option<&ParsedDoc>,
+    source: &str,
+    err: &ParseError,
+) -> Diagnostic {
     match err {
         ParseError::Sipha(
             ParseErrorInner::NoMatch(d) | ParseErrorInner::Other(EngineParseError::NoMatch(d)),
@@ -168,7 +173,8 @@ pub(crate) fn compute_diagnostics_single_buffer(
     document_uri: Option<&str>,
     use_signature_grammar: bool,
 ) -> Vec<Diagnostic> {
-    let opts = language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
+    let opts =
+        language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
     let base_uri = document_uri.and_then(|s| Url::parse(s).ok());
 
     let parsed = if use_signature_grammar || document_uri.is_some_and(signature_mode_for_uri) {
@@ -187,18 +193,15 @@ pub(crate) fn compute_diagnostics_single_buffer(
                 .collect();
             let analysis = run_semantic_analysis(pw.doc.root(), opts.version);
             for d in &analysis.diagnostics {
-                let related_information = base_uri
-                    .as_ref()
-                    .zip(d.related_span)
-                    .map(|(u, span)| {
-                        vec![DiagnosticRelatedInformation {
-                            location: Location {
-                                uri: u.clone(),
-                                range: span_to_lsp_range(&pw.doc, span),
-                            },
-                            message: "Related location".to_string(),
-                        }]
-                    });
+                let related_information = base_uri.as_ref().zip(d.related_span).map(|(u, span)| {
+                    vec![DiagnosticRelatedInformation {
+                        location: Location {
+                            uri: u.clone(),
+                            range: span_to_lsp_range(&pw.doc, span),
+                        },
+                        message: "Related location".to_string(),
+                    }]
+                });
                 let severity = match d.severity {
                     SemanticSeverity::Error => DiagnosticSeverity::ERROR,
                     SemanticSeverity::Warning => DiagnosticSeverity::WARNING,
@@ -206,7 +209,9 @@ pub(crate) fn compute_diagnostics_single_buffer(
                 out.push(Diagnostic {
                     range: span_to_lsp_range(&pw.doc, d.span),
                     severity: Some(severity),
-                    code: Some(NumberOrString::String(semantic_code_str(d.code).to_string())),
+                    code: Some(NumberOrString::String(
+                        semantic_code_str(d.code).to_string(),
+                    )),
                     code_description: None,
                     source: Some("leekscript".to_string()),
                     message: d.message.clone(),

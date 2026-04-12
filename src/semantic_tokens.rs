@@ -1,11 +1,12 @@
 //! CST token → LSP semantic tokens for editor highlighting.
 
 use leekscript::parse::{
-    LanguageOptions, parse_doc_with_recovery, parse_signature_doc_with_recovery,
+    parse_doc_with_recovery, parse_signature_doc_with_recovery, LanguageOptions,
 };
-use leekscript::syntax::kinds::{K, Lex, Node};
+use leekscript::syntax::kinds::{Lex, Node, K};
 use lsp_types::{
-    Range, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens, SemanticTokensLegend, Url,
+    Range, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
+    SemanticTokensLegend, Url,
 };
 use sipha::diagnostics::line_index::LineIndex;
 use sipha::diagnostics::parsed_doc::ParsedDoc;
@@ -19,7 +20,11 @@ fn lsp_range_to_byte_span(source: &str, range: &Range) -> Option<Span> {
     let idx = LineIndex::new(source.as_bytes());
     let start = idx.line_col_utf16_to_byte(source, range.start.line, range.start.character)?;
     let end = idx.line_col_utf16_to_byte_clamped(source, range.end.line, range.end.character)?;
-    let (lo, hi) = if start <= end { (start, end) } else { (end, start) };
+    let (lo, hi) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
     Some(Span::new(lo, hi))
 }
 
@@ -94,7 +99,9 @@ fn span_visual_line_ranges(doc: &ParsedDoc, span: Span) -> Vec<(Pos, Pos)> {
             .iter()
             .position(|&b| b == b'\n' || b == b'\r')
             .unwrap_or(bytes.len());
-        let end = span.start.saturating_add(u32::try_from(n).unwrap_or(u32::MAX));
+        let end = span
+            .start
+            .saturating_add(u32::try_from(n).unwrap_or(u32::MAX));
         if end > span.start {
             out.push((span.start, end));
         }
@@ -148,7 +155,8 @@ fn emit_documentation_line(
     line: &str,
 ) {
     let tags = leekscript::syntax::doxygen_command_byte_ranges(line);
-    let line_end_byte = line_start_byte.saturating_add(u32::try_from(line.len()).unwrap_or(u32::MAX));
+    let line_end_byte =
+        line_start_byte.saturating_add(u32::try_from(line.len()).unwrap_or(u32::MAX));
     if tags.is_empty() {
         push_span_comment(
             data,
@@ -166,7 +174,15 @@ fn emit_documentation_line(
         let abs_s = line_start_byte.saturating_add(u32::try_from(ts).unwrap_or(u32::MAX));
         let abs_e = line_start_byte.saturating_add(u32::try_from(te).unwrap_or(u32::MAX));
         if abs_s > cursor {
-            push_span_comment(data, doc, state, cursor, abs_s, TY_COMMENT, MOD_DOCUMENTATION);
+            push_span_comment(
+                data,
+                doc,
+                state,
+                cursor,
+                abs_s,
+                TY_COMMENT,
+                MOD_DOCUMENTATION,
+            );
         }
         push_span_comment(
             data,
@@ -379,11 +395,7 @@ fn operator_family_token_type(l: Lex, in_type_ctx: bool, in_tpl: bool) -> u32 {
             Lex::Lt | Lex::Gt | Lex::BitOr | Lex::Question | Lex::Comma | Lex::Arrow
         )
     {
-        return if in_tpl {
-            TY_TYPE_PARAMETER
-        } else {
-            TY_TYPE
-        };
+        return if in_tpl { TY_TYPE_PARAMETER } else { TY_TYPE };
     }
     TY_OPERATOR
 }
@@ -460,7 +472,9 @@ fn leek_token_semantics(root: &SyntaxNode, token: &SyntaxToken) -> Option<(u32, 
     let bytes = text.as_bytes();
     let site = TokenScopeSite::new(root, token);
     let in_type_ctx = site.as_ref().is_some_and(TokenScopeSite::in_type_syntax);
-    let in_tpl = site.as_ref().is_some_and(TokenScopeSite::in_template_params);
+    let in_tpl = site
+        .as_ref()
+        .is_some_and(TokenScopeSite::in_template_params);
     let ty = match k {
         K::Lex(Lex::Ws) | K::Node(Node::Trivia) => return None,
         K::Lex(Lex::LineComment | Lex::BlockComment) => TY_COMMENT,
@@ -519,7 +533,10 @@ fn span_overlaps_byte_range(span: Span, filter: Span) -> bool {
     span.start < filter.end && span.end > filter.start
 }
 
-fn semantic_tokens_from_parsed_doc_filtered(doc: &ParsedDoc, filter: Option<Span>) -> SemanticTokens {
+fn semantic_tokens_from_parsed_doc_filtered(
+    doc: &ParsedDoc,
+    filter: Option<Span>,
+) -> SemanticTokens {
     let mut data: Vec<SemanticToken> = Vec::new();
     let mut state = if let Some(f) = filter {
         let (rl, rc) = doc.offset_to_line_col_utf16(f.start);
@@ -638,7 +655,11 @@ pub fn semantic_tokens_for_source(source: &str) -> SemanticTokens {
 
 /// Semantic tokens intersecting `range` (LSP UTF-16), encoded relative to `range.start` per LSP.
 #[must_use]
-pub fn semantic_tokens_for_document_in_range(source: &str, document_uri: Option<&str>, range: Range) -> SemanticTokens {
+pub fn semantic_tokens_for_document_in_range(
+    source: &str,
+    document_uri: Option<&str>,
+    range: Range,
+) -> SemanticTokens {
     let opts = LanguageOptions::v4_experimental_all();
     let parsed = if document_uri.is_some_and(signature_mode_for_uri) {
         parse_signature_doc_with_recovery(source, opts)

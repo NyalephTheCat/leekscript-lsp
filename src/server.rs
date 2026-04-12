@@ -2,17 +2,17 @@
 
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
-    CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CodeLensOptions, CodeLensParams,
-    CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
-    DidChangeConfigurationParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
-    DocumentRangeFormattingParams, DocumentSymbolParams, DocumentSymbolResponse, FoldingRange,
-    FoldingRangeParams, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, InlayHint,
-    InlayHintParams, InitializeParams, InitializeResult, Location, OneOf, ReferenceParams,
-    RenameParams, SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams,
+    CodeActionParams, CodeActionProviderCapability, CodeActionResponse, CodeLensOptions,
+    CodeLensParams, CompletionOptions, CompletionParams, CompletionResponse,
+    DidChangeConfigurationParams, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
+    DidOpenTextDocumentParams, DocumentFormattingParams, DocumentRangeFormattingParams,
+    DocumentSymbolParams, DocumentSymbolResponse, FoldingRange, FoldingRangeParams,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, InitializeParams,
+    InitializeResult, InlayHint, InlayHintParams, Location, OneOf, ReferenceParams, RenameParams,
+    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams,
     SemanticTokensRangeParams, SemanticTokensRangeResult, SemanticTokensResult,
-    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentSyncCapability,
-    TextDocumentContentChangeEvent, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit,
+    SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentContentChangeEvent,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit,
     WorkDoneProgressOptions, WorkspaceEdit,
 };
 use tower_lsp::LanguageServer;
@@ -59,21 +59,25 @@ impl LanguageServer for Backend {
         let legend = semantic_token_legend();
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
-                    open_close: Some(true),
-                    change: Some(TextDocumentSyncKind::INCREMENTAL),
-                    will_save: None,
-                    will_save_wait_until: None,
-                    save: None,
-                })),
-                semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
-                    SemanticTokensOptions {
-                        legend,
-                        full: Some(SemanticTokensFullOptions::Bool(true)),
-                        range: Some(true),
-                        work_done_progress_options: WorkDoneProgressOptions::default(),
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        open_close: Some(true),
+                        change: Some(TextDocumentSyncKind::INCREMENTAL),
+                        will_save: None,
+                        will_save_wait_until: None,
+                        save: None,
                     },
                 )),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend,
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            range: Some(true),
+                            work_done_progress_options: WorkDoneProgressOptions::default(),
+                        },
+                    ),
+                ),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 document_range_formatting_provider: Some(OneOf::Left(true)),
                 folding_range_provider: Some(true.into()),
@@ -142,7 +146,12 @@ impl LanguageServer for Backend {
         let uri_str = uri.to_string();
         let version = params.text_document.version;
         let new_source = {
-            let old = self.documents.read().get(&uri_str).cloned().unwrap_or_default();
+            let old = self
+                .documents
+                .read()
+                .get(&uri_str)
+                .cloned()
+                .unwrap_or_default();
             apply_content_changes(&old, params.content_changes).unwrap_or(old)
         };
         {
@@ -178,7 +187,11 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        let uri = params.text_document_position_params.text_document.uri.clone();
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .clone();
         if uri.scheme() != "file" {
             return Ok(None);
         }
@@ -199,7 +212,11 @@ impl LanguageServer for Backend {
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        let uri = params.text_document_position_params.text_document.uri.clone();
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .clone();
         if uri.scheme() != "file" {
             return Ok(None);
         }
@@ -213,7 +230,12 @@ impl LanguageServer for Backend {
         let Some(intel) = self.project_intel(&uri, &source).await else {
             return Ok(None);
         };
-        Ok(intel::goto_definition(intel.as_ref(), &path, &source, &params))
+        Ok(intel::goto_definition(
+            intel.as_ref(),
+            &path,
+            &source,
+            &params,
+        ))
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
@@ -249,7 +271,12 @@ impl LanguageServer for Backend {
         let Some(intel) = self.project_intel(&uri, &source).await else {
             return Ok(Some(CompletionResponse::Array(Vec::new())));
         };
-        Ok(Some(intel::completion(intel.as_ref(), &path, &source, &params)))
+        Ok(Some(intel::completion(
+            intel.as_ref(),
+            &path,
+            &source,
+            &params,
+        )))
     }
 
     async fn document_symbol(
@@ -270,7 +297,11 @@ impl LanguageServer for Backend {
         let Some(intel) = self.project_intel(&uri, &source).await else {
             return Ok(Some(DocumentSymbolResponse::Nested(Vec::new())));
         };
-        Ok(Some(intel::document_symbols(intel.as_ref(), &path, &source)))
+        Ok(Some(intel::document_symbols(
+            intel.as_ref(),
+            &path,
+            &source,
+        )))
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
@@ -399,9 +430,10 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let p = params.clone();
-        let tokens = tokio::task::spawn_blocking(move || intel::semantic_tokens_range(&source, &uri, &p))
-            .await
-            .unwrap_or_default();
+        let tokens =
+            tokio::task::spawn_blocking(move || intel::semantic_tokens_range(&source, &uri, &p))
+                .await
+                .unwrap_or_default();
         Ok(Some(SemanticTokensRangeResult::Tokens(tokens)))
     }
 

@@ -9,7 +9,7 @@ use lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Command, CompletionItem, CompletionItemKind,
     CompletionParams, CompletionResponse, Diagnostic, DocumentSymbol, DocumentSymbolResponse,
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams, InlayHint,
-    InlayHintLabel, InlayHintKind, InlayHintTooltip, Location, MarkupContent, MarkupKind,
+    InlayHintKind, InlayHintLabel, InlayHintTooltip, Location, MarkupContent, MarkupKind,
     NumberOrString, Position, Range, ReferenceParams, RenameParams, SemanticTokensRangeParams,
     SymbolKind as LspSymbolKind, TextEdit, Url, WorkspaceEdit,
 };
@@ -17,18 +17,56 @@ use sipha::diagnostics::line_index::LineIndex;
 use sipha::types::Span;
 
 use crate::diagnostics::span_to_range_in_source;
-use crate::hover_markdown::symbol_markdown;
 use crate::diagnostics::{
-    analyze_parsed, clamp_span_to_source, merged_location_to_lsp, merged_span_to_file_span,
-    parse_merged_check_unit, prepare_open_file_merged_unit, full_document_range,
+    analyze_parsed, clamp_span_to_source, full_document_range, merged_location_to_lsp,
+    merged_span_to_file_span, parse_merged_check_unit, prepare_open_file_merged_unit,
 };
+use crate::hover_markdown::symbol_markdown;
 use crate::semantic_tokens::semantic_tokens_for_document_in_range;
 
 const KEYWORDS: &[&str] = &[
-    "any", "as", "boolean", "break", "case", "catch", "class", "continue", "default", "do", "else",
-    "extends", "false", "final", "for", "function", "global", "if", "in", "include", "instanceof",
-    "integer", "is", "let", "match", "new", "null", "private", "protected", "public", "real",
-    "return", "static", "string", "super", "switch", "this", "throw", "true", "try", "var", "void",
+    "any",
+    "as",
+    "boolean",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "continue",
+    "default",
+    "do",
+    "else",
+    "extends",
+    "false",
+    "final",
+    "for",
+    "function",
+    "global",
+    "if",
+    "in",
+    "include",
+    "instanceof",
+    "integer",
+    "is",
+    "let",
+    "match",
+    "new",
+    "null",
+    "private",
+    "protected",
+    "public",
+    "real",
+    "return",
+    "static",
+    "string",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "var",
+    "void",
     "while",
 ];
 
@@ -79,7 +117,8 @@ pub(crate) fn load_intel_file(
     signature_files: &[std::path::PathBuf],
     open: &HashMap<String, String>,
 ) -> Option<ProjectIntel> {
-    let prep = prepare_open_file_merged_unit(source, entry_path, entry_uri, signature_files, open).ok()?;
+    let prep =
+        prepare_open_file_merged_unit(source, entry_path, entry_uri, signature_files, open).ok()?;
     let parsed = parse_merged_check_unit(&prep).ok()?;
     let analysis = analyze_parsed(&parsed, prep.resolved.version);
     Some(ProjectIntel {
@@ -96,7 +135,12 @@ fn path_same_file(a: &Path, b: &Path) -> bool {
 }
 
 /// LSP range in the **entry** buffer for a merged-span, if that span maps to `entry_path`.
-fn range_in_entry_source(intel: &ProjectIntel, entry_path: &Path, entry_source: &str, merged_span: Span) -> Option<Range> {
+fn range_in_entry_source(
+    intel: &ProjectIntel,
+    entry_path: &Path,
+    entry_source: &str,
+    merged_span: Span,
+) -> Option<Range> {
     let (path, fspan) = merged_span_to_file_span(&intel.prep.mapping, merged_span)?;
     if !path_same_file(&path, entry_path) {
         return None;
@@ -110,7 +154,12 @@ fn file_byte_at_position(source: &str, pos: Position) -> Option<u32> {
     idx.line_col_utf16_to_byte(source, pos.line, pos.character)
 }
 
-fn merged_offset_for_cursor(intel: &ProjectIntel, entry_path: &Path, source: &str, pos: Position) -> Option<u32> {
+fn merged_offset_for_cursor(
+    intel: &ProjectIntel,
+    entry_path: &Path,
+    source: &str,
+    pos: Position,
+) -> Option<u32> {
     let fb = file_byte_at_position(source, pos)?;
     intel
         .prep
@@ -423,7 +472,12 @@ pub(crate) fn completion(
     };
 
     if want("if") {
-        push_snippet(&mut items, "if", "if (${1:cond}) {\n\t$0\n}", CompletionItemKind::SNIPPET);
+        push_snippet(
+            &mut items,
+            "if",
+            "if (${1:cond}) {\n\t$0\n}",
+            CompletionItemKind::SNIPPET,
+        );
     }
     if want("for") {
         push_snippet(
@@ -448,9 +502,13 @@ pub(crate) fn completion(
 fn lsp_symbol_kind(k: &SymbolKind) -> LspSymbolKind {
     match k {
         SymbolKind::Class => LspSymbolKind::CLASS,
-        SymbolKind::Function | SymbolKind::Method | SymbolKind::Constructor => LspSymbolKind::FUNCTION,
+        SymbolKind::Function | SymbolKind::Method | SymbolKind::Constructor => {
+            LspSymbolKind::FUNCTION
+        }
         SymbolKind::Field => LspSymbolKind::FIELD,
-        SymbolKind::Variable | SymbolKind::Parameter | SymbolKind::Global => LspSymbolKind::VARIABLE,
+        SymbolKind::Variable | SymbolKind::Parameter | SymbolKind::Global => {
+            LspSymbolKind::VARIABLE
+        }
         SymbolKind::TypeParam => LspSymbolKind::TYPE_PARAMETER,
     }
 }
@@ -464,11 +522,16 @@ pub(crate) fn document_symbols(
     for s in &intel.analysis.symbols {
         if !matches!(
             s.kind,
-            SymbolKind::Function | SymbolKind::Class | SymbolKind::Method | SymbolKind::Field | SymbolKind::Constructor
+            SymbolKind::Function
+                | SymbolKind::Class
+                | SymbolKind::Method
+                | SymbolKind::Field
+                | SymbolKind::Constructor
         ) {
             continue;
         }
-        let Some(range) = range_in_entry_source(intel, entry_path, entry_source, s.name_span) else {
+        let Some(range) = range_in_entry_source(intel, entry_path, entry_source, s.name_span)
+        else {
             continue;
         };
         #[allow(deprecated)]
@@ -516,7 +579,8 @@ pub(crate) fn inlay_hints(
         if sym.declared_ty.is_some() {
             continue;
         }
-        let Some(range) = range_in_entry_source(intel, entry_path, entry_source, sym.name_span) else {
+        let Some(range) = range_in_entry_source(intel, entry_path, entry_source, sym.name_span)
+        else {
             continue;
         };
         if let Some(r) = only_range.as_ref() {
@@ -544,7 +608,12 @@ pub(crate) fn inlay_hints(
     out
 }
 
-pub(crate) fn code_lenses(intel: &ProjectIntel, entry_path: &Path, entry_source: &str, uri: &Url) -> Vec<lsp_types::CodeLens> {
+pub(crate) fn code_lenses(
+    intel: &ProjectIntel,
+    entry_path: &Path,
+    entry_source: &str,
+    uri: &Url,
+) -> Vec<lsp_types::CodeLens> {
     let mut lenses = Vec::new();
     for sym in &intel.analysis.symbols {
         if !matches!(
@@ -553,7 +622,8 @@ pub(crate) fn code_lenses(intel: &ProjectIntel, entry_path: &Path, entry_source:
         ) {
             continue;
         }
-        let Some(range) = range_in_entry_source(intel, entry_path, entry_source, sym.name_span) else {
+        let Some(range) = range_in_entry_source(intel, entry_path, entry_source, sym.name_span)
+        else {
             continue;
         };
         let n = intel
@@ -629,7 +699,10 @@ pub(crate) fn code_actions(
                 let prefer_fn = looks_like_call(entry_source, cursor_byte);
                 let prefer_class = looks_like_new_class(entry_source, cursor_byte)
                     || looks_like_member_access(entry_source, cursor_byte)
-                    || r.name.chars().next().is_some_and(|c| c.is_ascii_uppercase());
+                    || r.name
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_uppercase());
 
                 let end = full_document_range(entry_source).end;
                 let insert_at = Range { start: end, end };
@@ -685,7 +758,10 @@ pub(crate) fn code_actions(
                     entry_uri.clone(),
                     vec![TextEdit {
                         range: insert_at,
-                        new_text: format!("\n\nclass {} {{\n\tconstructor() {{\n\t\t\n\t}}\n}}\n", r.name),
+                        new_text: format!(
+                            "\n\nclass {} {{\n\tconstructor() {{\n\t\t\n\t}}\n}}\n",
+                            r.name
+                        ),
                     }],
                 );
                 out.push(CodeActionOrCommand::CodeAction(CodeAction {
@@ -757,7 +833,12 @@ pub(crate) fn rename(
     source: &str,
     params: &RenameParams,
 ) -> Option<WorkspaceEdit> {
-    let off = merged_offset_for_cursor(intel, entry_path, source, params.text_document_position.position)?;
+    let off = merged_offset_for_cursor(
+        intel,
+        entry_path,
+        source,
+        params.text_document_position.position,
+    )?;
 
     let target_id = if let Some(sym) = narrowest_symbol_name_at(&intel.analysis, off) {
         Some(sym.id)
@@ -773,9 +854,9 @@ pub(crate) fn rename(
     let mut seen: HashSet<(String, u32, u32, u32, u32)> = HashSet::new();
 
     let push_edit = |m: &mut HashMap<String, Vec<TextEdit>>,
-                         seen: &mut HashSet<(String, u32, u32, u32, u32)>,
-                         loc: Location,
-                         new_text: String| {
+                     seen: &mut HashSet<(String, u32, u32, u32, u32)>,
+                     loc: Location,
+                     new_text: String| {
         let key = (
             loc.uri.to_string(),
             loc.range.start.line,

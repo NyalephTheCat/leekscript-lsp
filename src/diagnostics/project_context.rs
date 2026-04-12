@@ -5,11 +5,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use leekscript::include::{
-    infer_include_project_root, prepare_merged_check_unit, LoadedProject, MergedCheckUnit, MergedSourceMapping,
+    infer_include_project_root, prepare_merged_check_unit, LoadedProject, MergedCheckUnit,
+    MergedSourceMapping,
 };
 use leekscript::parse::{
-    parse_doc_with_recovery, parse_signature_doc_with_recovery, LanguageOptions, ParsedWithRecovery, ParseError,
-    Version,
+    parse_doc_with_recovery, parse_signature_doc_with_recovery, LanguageOptions, ParseError,
+    ParsedWithRecovery, Version,
 };
 use leekscript::{run_semantic_analysis, AnalysisResult};
 use lsp_types::{Location, Range, Url};
@@ -17,7 +18,9 @@ use sipha::types::Span;
 
 use super::convert::span_to_range_in_source;
 
-pub(crate) fn path_overlay_from_open_documents(open: &HashMap<String, String>) -> HashMap<PathBuf, String> {
+pub(crate) fn path_overlay_from_open_documents(
+    open: &HashMap<String, String>,
+) -> HashMap<PathBuf, String> {
     let mut m = HashMap::new();
     for (uri_s, text) in open {
         let Ok(uri) = Url::parse(uri_s) else {
@@ -49,7 +52,10 @@ pub(crate) fn source_for_mapped_path(project: &LoadedProject, path: &Path) -> Op
     fs::read_to_string(path).ok()
 }
 
-pub(crate) fn merged_span_to_file_span(mapping: &MergedSourceMapping, span: Span) -> Option<(PathBuf, Span)> {
+pub(crate) fn merged_span_to_file_span(
+    mapping: &MergedSourceMapping,
+    span: Span,
+) -> Option<(PathBuf, Span)> {
     let sm = mapping.span_at_merged_offset(span.start)?;
     let rel = span.start.saturating_sub(sm.merged_start);
     let file_start = sm.file_offset.saturating_add(rel);
@@ -123,10 +129,13 @@ pub(crate) fn prepare_open_file_merged_unit(
         overlay.insert(p, source.to_string());
     }
 
-    prepare_merged_check_unit(&root, entry_path, lang, signature_files, Some(&overlay)).map_err(|e| e.to_string())
+    prepare_merged_check_unit(&root, entry_path, lang, signature_files, Some(&overlay))
+        .map_err(|e| e.to_string())
 }
 
-pub(crate) fn parse_merged_check_unit(prep: &MergedCheckUnit) -> Result<ParsedWithRecovery, ParseError> {
+pub(crate) fn parse_merged_check_unit(
+    prep: &MergedCheckUnit,
+) -> Result<ParsedWithRecovery, ParseError> {
     if prep.use_signature_grammar {
         parse_signature_doc_with_recovery(&prep.combined, prep.resolved)
     } else {

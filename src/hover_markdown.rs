@@ -42,7 +42,12 @@ fn has_structured_sections(doc: &ParsedDoxygen) -> bool {
 fn format_param(p: &DoxygenParam) -> String {
     let name = p.name.trim();
     let desc = p.description.trim();
-    let dir = match p.direction.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+    let dir = match p
+        .direction
+        .as_deref()
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+    {
         Some(d) => format!(" *({d})*"),
         None => String::new(),
     };
@@ -65,7 +70,12 @@ fn format_retval(r: &DoxygenRetval) -> String {
 
 fn format_throw(t: &DoxygenThrows) -> String {
     let desc = t.description.trim();
-    match t.type_name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+    match t
+        .type_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    {
         Some(tn) if !desc.is_empty() => format!("- **`{tn}`** — {desc}\n"),
         Some(tn) => format!("- **`{tn}`**\n"),
         None if !desc.is_empty() => format!("- {desc}\n"),
@@ -196,7 +206,12 @@ pub fn parsed_doxygen_markdown(doc: &ParsedDoxygen) -> Option<String> {
         meta.push(format!("*Since {s}*"));
     }
     if !doc.authors.is_empty() {
-        let a: Vec<_> = doc.authors.iter().map(|x| x.trim()).filter(|x| !x.is_empty()).collect();
+        let a: Vec<_> = doc
+            .authors
+            .iter()
+            .map(|x| x.trim())
+            .filter(|x| !x.is_empty())
+            .collect();
         if !a.is_empty() {
             meta.push(format!("*Authors: {}*", a.join(", ")));
         }

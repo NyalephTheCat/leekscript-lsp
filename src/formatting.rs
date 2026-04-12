@@ -37,7 +37,8 @@ pub(crate) fn formatting_edits(
     document_uri: Option<&str>,
     lsp_opts: &FormattingOptions,
 ) -> Option<Vec<TextEdit>> {
-    let base_opts = language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
+    let base_opts =
+        language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
     let parsed = if document_uri.is_some_and(signature_mode_for_uri) {
         parse_signature_doc_with_recovery(source, base_opts)
     } else {
@@ -64,7 +65,11 @@ pub(crate) fn lsp_range_to_byte_span(source: &str, range: &Range) -> Option<Span
     let idx = LineIndex::new(source.as_bytes());
     let start = idx.line_col_utf16_to_byte(source, range.start.line, range.start.character)?;
     let end = idx.line_col_utf16_to_byte_clamped(source, range.end.line, range.end.character)?;
-    let (lo, hi) = if start <= end { (start, end) } else { (end, start) };
+    let (lo, hi) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
     Some(Span::new(lo, hi))
 }
 
@@ -80,7 +85,8 @@ pub(crate) fn range_formatting_edits(
     if sel.is_empty() {
         return None;
     }
-    let base_opts = language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
+    let base_opts =
+        language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
     let parsed = if document_uri.is_some_and(signature_mode_for_uri) {
         parse_signature_doc_with_recovery(source, base_opts)
     } else {

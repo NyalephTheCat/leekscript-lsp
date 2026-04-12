@@ -13,7 +13,8 @@ use sipha::types::Span;
 
 use super::convert::{leek_parse_error_to_lsp, semantic_code_str, sipha_diagnostic_message};
 use super::project_context::{
-    analyze_parsed, location_for_merged_span, parse_merged_check_unit, prepare_open_file_merged_unit,
+    analyze_parsed, location_for_merged_span, parse_merged_check_unit,
+    prepare_open_file_merged_unit,
 };
 
 fn related_for_merged_span(
@@ -43,7 +44,8 @@ fn parse_error_diagnostic_merged(
     {
         let merged_span = d.primary_span(combined.len());
         let message = sipha_diagnostic_message(d, combined);
-        let (uri, range) = location_for_merged_span(mapping, project, combined, entry_uri, merged_span);
+        let (uri, range) =
+            location_for_merged_span(mapping, project, combined, entry_uri, merged_span);
         return (
             uri,
             Diagnostic {
@@ -59,7 +61,8 @@ fn parse_error_diagnostic_merged(
             },
         );
     }
-    let (uri, range) = location_for_merged_span(mapping, project, combined, entry_uri, Span::new(0, 0));
+    let (uri, range) =
+        location_for_merged_span(mapping, project, combined, entry_uri, Span::new(0, 0));
     let mut diag = leek_parse_error_to_lsp(None, combined, err);
     diag.range = range;
     (uri, diag)
@@ -78,14 +81,18 @@ fn semantic_diagnostic_merged(
     };
     let (uri, range) = location_for_merged_span(mapping, project, combined, entry_uri, d.span);
     let related_information = d.related_span.map(|r| {
-        vec![related_for_merged_span(mapping, project, combined, entry_uri, r)]
+        vec![related_for_merged_span(
+            mapping, project, combined, entry_uri, r,
+        )]
     });
     (
         uri,
         Diagnostic {
             range,
             severity: Some(severity),
-            code: Some(NumberOrString::String(semantic_code_str(d.code).to_string())),
+            code: Some(NumberOrString::String(
+                semantic_code_str(d.code).to_string(),
+            )),
             code_description: None,
             source: Some("leekscript".to_string()),
             message: d.message.clone(),
@@ -103,7 +110,13 @@ pub(crate) fn try_file_project_diagnostics(
     signature_files: &[PathBuf],
     open_documents: &HashMap<String, String>,
 ) -> Result<Vec<(Url, Diagnostic)>, String> {
-    let prep = prepare_open_file_merged_unit(source, entry_path, entry_uri, signature_files, open_documents)?;
+    let prep = prepare_open_file_merged_unit(
+        source,
+        entry_path,
+        entry_uri,
+        signature_files,
+        open_documents,
+    )?;
 
     let parsed = parse_merged_check_unit(&prep);
 

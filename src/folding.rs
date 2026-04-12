@@ -15,7 +15,8 @@ use crate::semantic_tokens::signature_mode_for_uri;
 /// Folding ranges for `source`, using the same parse mode as semantic tokens / formatting.
 #[must_use]
 pub fn folding_ranges_for_document(source: &str, document_uri: Option<&str>) -> Vec<FoldingRange> {
-    let base_opts = language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
+    let base_opts =
+        language_options_with_source_directives(source, LanguageOptions::v4_experimental_all());
     let parsed = if document_uri.is_some_and(signature_mode_for_uri) {
         parse_signature_doc_with_recovery(source, base_opts)
     } else {
